@@ -42,7 +42,7 @@ def case_f(J_baseline):
     
     plot(
         "Thrust Loading: Linear vs Cosine Spacing (50 elements)",
-        bem_linear.r_R_list, [bem_linear.F_axial_list, bem_cosine.F_axial_list],
+        [bem_linear.r_R_list, bem_cosine.r_R_list], [bem_linear.F_axial_list, bem_cosine.F_axial_list],
         ["Linear Spacing", "Cosine Spacing"],
         "r/R", "Thrust Force per unit length (N/m)"
     )
