@@ -2,23 +2,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import numpy as np
 
-
-def plot(name, x_data, y_data_list, labels, xlabel="x", ylabel="y", colors=None):
-    """Plot multiple datasets on the same figure"""
-    plt.figure(figsize=(10, 6))
-    if colors is None:
-        colors = ['b', 'r', 'g', 'orange', 'purple', 'brown']
-    
-    for i, (y_data, label) in enumerate(zip(y_data_list, labels)):
-        plt.plot(x_data, y_data, marker='o', linestyle='-', 
-                color=colors[i % len(colors)], label=label, markersize=4)
-    
-    plt.title(name, fontsize=14, fontweight='bold')
-    plt.xlabel(xlabel, fontsize=12)
-    plt.ylabel(ylabel, fontsize=12)
-    plt.legend(loc='best')
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
+from plotter import plot
 
 
 class BEM:
@@ -38,35 +22,9 @@ class BEM:
         self.incidence = 0
         self.rotor_yaw = 0
         
-        # Blade specs (normalized)
-        self.r_R_norm, self.twist, self.c_R_norm = self._get_blade_specs(self.blade_start_fraction, self.collective_blade_pitch)
-        
         # Airfoil data
         self.AoA, self.cl, self.cd, self.cm = self._get_airfoil()
         self.rho = self._get_isa_density(self.altitude)
-    
-    @staticmethod
-    def _get_blade_specs(blade_start_fraction, collective_blade_pitch, resolution=100):
-        
-        r_R_norm = np.linspace(0, 1, resolution + 1)
-        
-        twist = []
-        c_R_norm = []
-        
-        for r_norm in r_R_norm:
-            if r_norm > blade_start_fraction:
-                
-                # Twist distribution (degrees)
-                twist.append(-50 * r_norm + 35 + collective_blade_pitch)
-                
-                # Normalized chord distribution (c/R)
-                c_R_norm.append(0.18 - 0.06 * r_norm)
-                
-            else:
-                twist.append(0)
-                c_R_norm.append(0)
-        
-        return r_R_norm, twist, c_R_norm
     
     @staticmethod
     def _get_airfoil():
@@ -344,197 +302,16 @@ class BEM:
         self.CP = self.CQ * omega * self.radius / self.U_inf
 
 
-
-def case_1(J_baseline):
+if __name__ == "__main__":
     
-    # ========== PART 1: BASELINE ANALYSIS ==========
-    print("\n" + "="*60)
-    print("PART 1: BASELINE BEM ANALYSIS")
-    print("="*60)
+    bem = BEM(J=2)
+    bem.blade_element(resolution=100, use_prandtl=False)
     
-    bem = BEM(J=J_baseline)
-    bem.blade_element(resolution=100, use_prandtl=True)
-    
-    # 1.1 Spanwise distribution of angle of attack
     plot(
         "Spanwise Distribution: Angle of Attack",
         bem.r_R_list, [bem.alpha_list],
         ["Angle of Attack (α)"],
         "r/R", "α (deg)"
     )
-    
-    # 1.2 Spanwise distribution of inflow angle
-    plot(
-        "Spanwise Distribution: Inflow Angle",
-        bem.r_R_list, [bem.phi_list],
-        ["Inflow Angle (φ)"],
-        "r/R", "φ (deg)"
-    )
-    
-    # 1.3 Spanwise distribution of axial and azimuthal inductions
-    plot(
-        "Spanwise Distribution: Induction Factors",
-        bem.r_R_list, [bem.a_list, bem.a_prime_list],
-        ["Axial Induction (a)", "Azimuthal Induction (a')"],
-        "r/R", "Induction Factor"
-    )
-    
-    # 1.4 Spanwise distribution of thrust and azimuthal loading
-    plot(
-        "Spanwise Distribution: Thrust and Torque Loading",
-        bem.r_R_list, [bem.F_axial_list, bem.F_azimuth_list],
-        ["Thrust Loading (F_axial)", "Torque Loading (F_azimuth)"],
-        "r/R", "Force per unit length (N/m)"
-    )
-    
-    # 1.5 Total thrust and torque versus advance ratio
-    print("\nCalculating performance vs advance ratio...")
-    J_values = np.array([1.6, 2.0, 2.4])
-    CT_values = []
-    CQ_values = []
-    CP_values = []
-    
-    for J in J_values:
-        bem_temp = BEM(J=J)
-        bem_temp.blade_element(resolution=100, use_prandtl=True)
-        CT_values.append(bem_temp.CT)
-        CQ_values.append(bem_temp.CQ)
-        CP_values.append(bem_temp.CP)
-    
-    plot(
-        "Total Performance vs Advance Ratio",
-        J_values, [CT_values, CQ_values, CP_values],
-        ["Thrust Coefficient (CT)", "Torque Coefficient (CQ)", "Power Coefficient (CP)"],
-        "Advance Ratio (J)", "Coefficient"
-    )
-    
-    print(f"\nBaseline Performance (J={J_baseline:.4f}, Radius={bem.radius}m):")
-    print(f"  CT = {bem.CT:.6f}")
-    print(f"  CQ = {bem.CQ:.6f}")
-    print(f"  CP = {bem.CP:.6f}")
-
-def case_2(J_baseline):
-    
-    # ========== PART 2: INFLUENCE OF TIP CORRECTION ==========
-    print("\n" + "="*60)
-    print("PART 2: INFLUENCE OF TIP CORRECTION")
-    print("="*60)
-    
-    bem_no_prandtl = BEM(J=J_baseline)
-    bem_no_prandtl.blade_element(resolution=100, use_prandtl=False)
-    
-    bem_with_prandtl = BEM(J=J_baseline)
-    bem_with_prandtl.blade_element(resolution=100, use_prandtl=True)
-    
-    # 2.1 Compare thrust loading
-    plot(
-        "Influence of Prandtl Tip Correction on Thrust Loading",
-        bem_with_prandtl.r_R_list,
-        [bem_no_prandtl.F_axial_list, bem_with_prandtl.F_axial_list],
-        ["Without Prandtl", "With Prandtl"],
-        "r/R", "Thrust Force per unit length (N/m)"
-    )
-    
-    # 2.2 Compare induction factors
-    plot(
-        "Influence of Prandtl Tip Correction on Axial Induction",
-        bem_with_prandtl.r_R_list,
-        [bem_no_prandtl.a_list, bem_with_prandtl.a_list],
-        ["Without Prandtl", "With Prandtl"],
-        "r/R", "Axial Induction Factor (a)"
-    )
-    
-    # 2.3 Show Prandtl factor distribution
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(bem_with_prandtl.r_R_list, bem_with_prandtl.F_prandtl_list, marker='o', linestyle='-', color='green', markersize=4)
-    ax.set_xlabel("r/R", fontsize=12)
-    ax.set_ylabel("Prandtl Loss Factor (F)", fontsize=12)
-    ax.set_title("Prandtl Tip and Root Loss Factor Distribution", fontsize=14, fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.axhline(y=1.0, color='r', linestyle='--', alpha=0.5, label='F = 1 (no loss)')
-    ax.legend()
-    plt.tight_layout()
-    
-    print(f"\nPerformance Comparison (Radius={bem_with_prandtl.radius}m):")
-    print(f"  Without Prandtl: CT = {bem_no_prandtl.CT:.6f}, CQ = {bem_no_prandtl.CQ:.6f}")
-    print(f"  With Prandtl:    CT = {bem_with_prandtl.CT:.6f}, CQ = {bem_with_prandtl.CQ:.6f}")
-    print(f"  CT Reduction:    {(1 - bem_with_prandtl.CT/bem_no_prandtl.CT)*100:.2f}%")
-
-def case_3(J_baseline):
-    
-    # ========== PART 3: INFLUENCE OF GRID RESOLUTION AND SPACING ==========
-    print("\n" + "="*60)
-    print("PART 3: GRID RESOLUTION AND SPACING STUDY")
-    print("="*60)
-    
-    # Test different resolutions
-    resolutions = [10, 20, 30, 50, 75, 100, 150, 200]
-    CT_linear = []
-    CT_cosine = []
-    
-    for res in resolutions:
-        bem_lin = BEM(J=J_baseline)
-        bem_lin.blade_element(resolution=res, spacing='linear', use_prandtl=True)
-        CT_linear.append(bem_lin.CT)
-        
-        bem_cos = BEM(J=J_baseline)
-        bem_cos.blade_element(resolution=res, spacing='cosine', use_prandtl=True)
-        CT_cosine.append(bem_cos.CT)
-    
-    plot(
-        "Convergence of Thrust Coefficient with Grid Resolution",
-        resolutions, [CT_linear, CT_cosine],
-        ["Linear Spacing", "Cosine Spacing"],
-        "Number of Annuli", "CT"
-    )
-    
-    # Compare spacing methods at same resolution
-    bem_linear = BEM(J=np.pi/6)
-    bem_linear.blade_element(resolution=50, spacing='linear', use_prandtl=True)
-    
-    bem_cosine = BEM(J=np.pi/6)
-    bem_cosine.blade_element(resolution=50, spacing='cosine', use_prandtl=True)
-    
-    plot(
-        "Thrust Loading: Linear vs Cosine Spacing (50 elements)",
-        bem_linear.r_R_list, [bem_linear.F_axial_list, bem_cosine.F_axial_list],
-        ["Linear Spacing", "Cosine Spacing"],
-        "r/R", "Thrust Force per unit length (N/m)"
-    )
-    
-    # Show radial station distribution
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-    
-    ax1.plot(range(len(bem_linear.r_R_list)), bem_linear.r_R_list, 'o-', label='Linear')
-    ax1.set_xlabel("Station Index", fontsize=12)
-    ax1.set_ylabel("r/R", fontsize=12)
-    ax1.set_title("Linear Spacing Distribution", fontsize=12, fontweight='bold')
-    ax1.grid(True, alpha=0.3)
-    
-    ax2.plot(range(len(bem_cosine.r_R_list)), bem_cosine.r_R_list, 'o-', color='orange', label='Cosine')
-    ax2.set_xlabel("Station Index", fontsize=12)
-    ax2.set_ylabel("r/R", fontsize=12)
-    ax2.set_title("Cosine Spacing Distribution", fontsize=12, fontweight='bold')
-    ax2.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    
-    print(f"\nGrid Resolution Study:")
-    print(f"  Linear spacing (100 elements):  CT = {CT_linear[-3]:.6f}")
-    print(f"  Cosine spacing (100 elements):  CT = {CT_cosine[-3]:.6f}")
-    print(f"  Difference: {abs(CT_linear[-3] - CT_cosine[-3]):.6f}")
-    
-    print("\n" + "="*60)
-    print("ANALYSIS COMPLETE")
-    print("="*60 + "\n")
-
-
-if __name__ == "__main__":
-    
-    J_baseline = 2.1428570754 # rpm = 1200
-    
-    case_1(J_baseline)
-    case_2(J_baseline)
-    case_3(J_baseline)
     
     plt.show()
