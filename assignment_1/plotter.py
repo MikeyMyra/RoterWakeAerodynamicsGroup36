@@ -5,10 +5,15 @@ def plot(name, x_data, y_data_list, labels, xlabel="x", ylabel="y", colors=None)
     plt.figure(figsize=(10, 6))
     if colors is None:
         colors = ['b', 'r', 'g', 'orange', 'purple', 'brown']
-    
-    for i, (y_data, label) in enumerate(zip(y_data_list, labels)):
-        plt.plot(x_data, y_data, marker='o', linestyle='-', 
-                color=colors[i % len(colors)], label=label, markersize=4)
+
+    if type(x_data[0]) != list:
+        for i, (y_data, label) in enumerate(zip(y_data_list, labels)):
+            plt.plot(x_data, y_data, marker='o', linestyle='-',
+                    color=colors[i % len(colors)], label=label, markersize=4)
+    else:
+        for i, (x, y_data, label) in enumerate(zip(x_data, y_data_list, labels)):
+            plt.plot(x, y_data, marker='o', linestyle='-',
+                    color=colors[i % len(colors)], label=label, markersize=4)
     
     plt.title(name, fontsize=14, fontweight='bold')
     plt.xlabel(xlabel, fontsize=12)

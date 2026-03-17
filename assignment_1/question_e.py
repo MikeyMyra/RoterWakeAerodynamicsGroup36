@@ -20,7 +20,7 @@ def case_e(J_baseline):
     # 2.1 Compare thrust loading
     plot(
         "Influence of Prandtl Tip Correction on Thrust Loading",
-        bem_with_prandtl.r_R_list,
+        [bem_no_prandtl.r_R_list , bem_with_prandtl.r_R_list],
         [bem_no_prandtl.F_axial_list, bem_with_prandtl.F_axial_list],
         ["Without Prandtl", "With Prandtl"],
         "r/R", "Thrust Force per unit length (N/m)"
@@ -29,7 +29,7 @@ def case_e(J_baseline):
     # 2.2 Compare induction factors
     plot(
         "Influence of Prandtl Tip Correction on Axial Induction",
-        bem_with_prandtl.r_R_list,
+        [bem_no_prandtl.r_R_list , bem_with_prandtl.r_R_list],
         [bem_no_prandtl.a_list, bem_with_prandtl.a_list],
         ["Without Prandtl", "With Prandtl"],
         "r/R", "Axial Induction Factor (a)"

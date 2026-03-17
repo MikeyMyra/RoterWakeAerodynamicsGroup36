@@ -14,6 +14,7 @@ class BEM:
         self.n_blades = 6
         self.blade_start_fraction = 0.25  # Fraction of radius (0-1)
         self.collective_blade_pitch = 46  # degrees
+        self.collective_blade_pitch_location = 0.7  # Fraction of radius (0-1)
         
         # Operational specs
         self.U_inf = 60  # m/s
@@ -78,10 +79,10 @@ class BEM:
         if mu < mu_root:
             return 1.0
         
-        if mu > 0.99:
+        if mu >= 1.00:
             return 0.0
         
-        if a >= 0.99 or a <= 0.0:
+        if a >= 1.00 or a <= 0.0:
             a = 0.5
         
         omega = (2 * np.pi * self.rpm) / 60
@@ -89,24 +90,24 @@ class BEM:
         
         try:
             exponent_tip = -(self.n_blades / 2) * ((1 - mu) / mu) * np.sqrt(1 + (mu**2 * lambda_local**2) / ((1 - a)**2))
-            exponent_tip = np.clip(exponent_tip, -10, 0)
+            #exponent_tip = np.clip(exponent_tip, -10, 0)
             f_tip = (2 / np.pi) * np.arccos(np.exp(exponent_tip))
         except:
-            f_tip = 0.01
+            f_tip = 1.
         
         try:
             exponent_root = -(self.n_blades / 2) * ((mu - mu_root) / mu) * np.sqrt(1 + (mu**2 * lambda_local**2) / ((1 - a)**2))
-            exponent_root = np.clip(exponent_root, -10, 0)
+            #exponent_root = np.clip(exponent_root, -10, 0)
             f_root = (2 / np.pi) * np.arccos(np.exp(exponent_root))
         except:
             f_root = 1.0
         
         F_total = f_tip * f_root
-        F_total = max(F_total, 0.0001)
+        #F_total = max(F_total, 0.0001)
         
         return F_total
     
-    def blade_element(self, resolution=100, tolerance=1e-5, max_iterations=100, spacing='linear', use_prandtl=True, track_convergence=False):
+    def blade_element(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
         
         cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
         cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
@@ -119,15 +120,17 @@ class BEM:
             r_normalized_temp = 0.5 * (1 - np.cos(theta))
             r_stations_norm = self.blade_start_fraction + (1 - self.blade_start_fraction) * r_normalized_temp
         else:  # linear
-            r_stations_norm = np.linspace(0, 1, resolution + 1)
+            r_stations_norm = np.linspace(self.blade_start_fraction, 1, resolution + 1)
         
         # Regenerate normalized blade properties at new radial stations
         twist_stations = []
         chord_norm_stations = []
+        r_stations_norm = np.insert(r_stations_norm, 0, 2*r_stations_norm[0]-r_stations_norm[1])
+        r_stations_norm = np.insert(r_stations_norm, 0, 0)
         
         for r_norm in r_stations_norm:
             if r_norm > self.blade_start_fraction:
-                twist_stations.append(-50 * r_norm + 35 + self.collective_blade_pitch)
+                twist_stations.append(-50 * r_norm + 35 + self.collective_blade_pitch + self.collective_blade_pitch_location * 50 - 35 )
                 chord_norm_stations.append(0.18 - 0.06 * r_norm)
             else:
                 twist_stations.append(0)
@@ -135,8 +138,9 @@ class BEM:
         
         # Calculate dr in absolute units
         r_stations_abs = r_stations_norm * self.radius
-        dr = np.diff(r_stations_abs)
-        dr = np.append(dr, dr[-1])
+        dr =  np.diff(r_stations_abs)
+        #dr = np.append(dr, dr[-1])
+        #dr = np.delete(dr, 0)
         
         A_disk = np.pi * self.radius**2
         
@@ -170,9 +174,9 @@ class BEM:
         dQ_total = 0
         
         for i, r_norm in enumerate(r_stations_norm):
-            
-            a = 0.5
-            a_prime = 0.5
+
+            a = 0.3
+            a_prime = 0.
             
             # Get absolute radius for calculations
             r_abs = r_norm * self.radius
@@ -201,6 +205,7 @@ class BEM:
                 continue
             
             iter_count = 0
+            converged = False
             for iteration in range(max_iterations):
                 iter_count += 1
                 
@@ -237,33 +242,39 @@ class BEM:
                 F_axial = (lift * np.cos(phi) + drag * np.sin(phi)) * F_prandtl
                 
                 # Thrust coefficient
-                A_a = 2 * np.pi * r_abs * dr[i]
-                C_T = (F_axial * self.n_blades * dr[i]) / (0.5 * self.rho * self.U_inf**2 * A_a)
+
+                A_a = 2 * np.pi * r_abs * dr[i-1]
+                C_T = (F_axial * self.n_blades * dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a)
+
                 
                 # Apply Glauert correction for axial induction
-                a_calc = self._apply_glauert_correction(C_T)
-                
+                a_calc = self._apply_glauert_correction(C_T) # Lucas: Is this necessary? Our propellor is not heavily loaded right?
+
+                a_calc = np.clip(a_calc, 0, 0.95)
                 # Azimuthal induction
                 a_prime_calc = (F_azimuth * self.n_blades) / (2 * self.rho * (2 * np.pi * r_abs) * self.U_inf**2 * (1 - a_calc) * omega * r_abs)
                 
                 # Check convergence
                 if abs(a_calc - a) < tolerance and abs(a_prime_calc - a_prime) < tolerance:
+                    converged = True
                     break
                 
                 # Relaxation of iterative variables
                 a = 0.75 * a + 0.25 * a_calc
                 a_prime = 0.75 * a_prime + 0.25 * a_prime_calc
+
+
             
             # Calculate circulation
             circulation = 0.5 * V_effective * chord_abs * cl
             
             # Accumulate totals
-            dT_total += F_axial * dr[i] * self.n_blades
-            dQ_total += F_azimuth * r_abs * dr[i] * self.n_blades
+            dT_total += F_axial * dr[i-1] * self.n_blades
+            dQ_total += F_azimuth * r_abs * dr[i-1] * self.n_blades
             
             # Differential coefficients
             dCT = C_T
-            dCQ = (F_azimuth * self.n_blades * r_abs * dr[i]) / (0.5 * self.rho * self.U_inf**2 * A_a * self.radius)
+            dCQ = (F_azimuth * self.n_blades * r_abs * dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a * self.radius)
             dCP = dCQ * omega * self.radius / self.U_inf
             
             # Store values (using NORMALIZED radius)
@@ -295,11 +306,16 @@ class BEM:
                 self.convergence_history['CT'].append(CT_current)
                 self.convergence_history['CQ'].append(CQ_current)
                 self.convergence_history['iteration'].append(i)
+
+            if converged == False:
+                print(
+                    f"Warning: Blade element method did not converge within the maximum iterations for station {r_abs} for spacing {spacing}.")
         
         # Total coefficients
         self.CT = dT_total / (0.5 * self.rho * self.U_inf**2 * A_disk)
         self.CQ = dQ_total / (0.5 * self.rho * self.U_inf**2 * A_disk * self.radius)
         self.CP = self.CQ * omega * self.radius / self.U_inf
+
 
 
 if __name__ == "__main__":
