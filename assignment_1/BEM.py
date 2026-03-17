@@ -78,7 +78,7 @@ class BEM:
         if mu < mu_root:
             return 1.0
         
-        if mu >= 0.99:
+        if mu > 0.99:
             return 0.0
         
         if a >= 0.99 or a <= 0.0:
