@@ -46,6 +46,16 @@ def case_f(J_baseline):
         ["Linear Spacing", "Cosine Spacing"],
         "r/R", "Thrust Force per unit length (N/m)"
     )
+        # print(res)
+    # print(0/0)
+    bem_lin_conv = BEM(J=J_baseline)
+    bem_lin_conv.blade_element(resolution=200, spacing='linear', use_prandtl=True)
+    # N_conv=len(bem_lin_conv.CT_conv_list)
+    # print(np.arange(0,N_conv,1).shape)
+    # print(np.array(bem_lin_conv.CT_conv_list).shape)
+    # print(bem_lin_conv.CT_conv_ind)
+    # print(bem_lin_conv.CT_conv_ind)
+    plot('Convergence History',[bem_lin_conv.CT_conv_ind],[bem_lin_conv.CT_conv_list],['Convergence Histotry'],'Iteration point','CT')
     
     # Show radial station distribution
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
