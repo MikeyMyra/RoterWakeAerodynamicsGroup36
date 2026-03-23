@@ -257,6 +257,7 @@ class BEM:
                 A_a = 2 * np.pi * r_abs * dr[i-1]
                 C_T = (F_axial * self.n_blades * dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a)
                 if i==20 and iter_count%2==0:
+                    print(r_norm)
                     self.CT_conv_list.append(C_T)
                     self.CT_conv_ind.append(iter_count)
 
