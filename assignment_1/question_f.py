@@ -55,8 +55,8 @@ def case_f(J_baseline):
     # print(np.array(bem_lin_conv.CT_conv_list).shape)
     # print(bem_lin_conv.CT_conv_ind)
     # print(bem_lin_conv.CT_conv_ind)
+    # print(bem_lin_conv.CT_conv_list[-1])
     plot('Convergence History',[bem_lin_conv.CT_conv_ind],[bem_lin_conv.CT_conv_list],['Convergence Histotry'],'Iteration point','CT')
-    print(bem_lin_conv.CT_conv_list[-1])
     # Show radial station distribution
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
     
