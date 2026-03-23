@@ -26,6 +26,7 @@ class BEM:
         # Airfoil data
         self.AoA, self.cl, self.cd, self.cm = self._get_airfoil()
         self.rho = self._get_isa_density(self.altitude)
+        self.p = self.rho * 287.05 * (288.15 - 0.0065 * self.altitude)
     
     @staticmethod
     def _get_airfoil():
@@ -165,6 +166,10 @@ class BEM:
         self.dCQ_dr_list = []
         self.dCP_dr_list = []
         self.iterations_list = []
+        self.p_stag_up_inf_list = []
+        self.p_stag_up_list = []
+        self.p_stag_down_list = []
+        self.p_stag_down_inf_list = []
         
         # Convergence tracking
         if track_convergence:
@@ -202,6 +207,10 @@ class BEM:
                 self.dCQ_dr_list.append(0)
                 self.dCP_dr_list.append(0)
                 self.iterations_list.append(0)
+                self.p_stag_up_inf_list.append(np.nan)
+                self.p_stag_up_list.append(np.nan)
+                self.p_stag_down_list.append(np.nan)
+                self.p_stag_down_inf_list.append(np.nan)
                 continue
             
             iter_count = 0
@@ -210,7 +219,7 @@ class BEM:
                 iter_count += 1
                 
                 # Velocities (absolute)
-                V_axial = self.U_inf * (1 - a)
+                V_axial = self.U_inf * (1 + a)
                 V_tangential = omega * r_abs * (1 + a_prime)
                 V_effective = np.sqrt(V_axial**2 + V_tangential**2)
                 
@@ -248,7 +257,7 @@ class BEM:
 
                 
                 # Apply Glauert correction for axial induction
-                a_calc = self._apply_glauert_correction(C_T) # Lucas: Is this necessary? Our propellor is not heavily loaded right?
+                a_calc = self._apply_glauert_correction(C_T)
 
                 a_calc = np.clip(a_calc, 0, 0.95)
                 # Azimuthal induction
@@ -298,6 +307,10 @@ class BEM:
             self.dCQ_dr_list.append(dCQ)
             self.dCP_dr_list.append(dCP)
             self.iterations_list.append(iter_count)
+            self.p_stag_up_inf_list.append(self.p + 0.5 * self.rho * self.U_inf**2)
+            self.p_stag_up_list.append(self.p + 0.5 * self.rho * self.U_inf**2)
+            self.p_stag_down_list.append(self.p + 0.5 * self.rho * (self.U_inf*(1+2*a_calc))**2 )
+            self.p_stag_down_inf_list.append(self.p + 0.5 * self.rho * (self.U_inf*(1+2*a_calc))**2 )
             
             # Track convergence if requested
             if track_convergence:
@@ -320,7 +333,7 @@ class BEM:
 
 if __name__ == "__main__":
     
-    bem = BEM(J=2)
+    bem = BEM(J=2.1428570754)
     bem.blade_element(resolution=100, use_prandtl=False)
     
     plot(
@@ -328,6 +341,13 @@ if __name__ == "__main__":
         bem.r_R_list, [bem.alpha_list],
         ["Angle of Attack (α)"],
         "r/R", "α (deg)"
+    )
+
+    plot(
+        "Bladewise Distribution: stagnation pressure upstream and downstream",
+        bem.r_R_list, [bem.p_stag_up_inf_list, bem.p_stag_up_list, bem.p_stag_down_list, bem.p_stag_down_inf_list],
+        ["p_stag_upstream_inf", "p_stag_upstream_rotor", "p_stag_downstream_rotor", "p_stag_downstream_inf"],
+        "r/R", "Pressure (Pa)"
     )
     
     plt.show()
