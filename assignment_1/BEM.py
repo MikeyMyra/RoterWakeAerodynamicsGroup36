@@ -162,6 +162,8 @@ class BEM:
         self.circulation_list = []
         self.F_prandtl_list = []
         self.dCT_dr_list = []
+        self.CT_conv_list = []
+        self.CT_conv_ind=[]
         self.dCQ_dr_list = []
         self.dCP_dr_list = []
         self.iterations_list = []
@@ -245,6 +247,9 @@ class BEM:
 
                 A_a = 2 * np.pi * r_abs * dr[i-1]
                 C_T = (F_axial * self.n_blades * dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a)
+                if i==20 and iter_count%2==0:
+                    self.CT_conv_list.append(C_T)
+                    self.CT_conv_ind.append(iter_count)
 
                 
                 # Apply Glauert correction for axial induction
