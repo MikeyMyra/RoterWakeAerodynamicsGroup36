@@ -66,12 +66,13 @@ class BEM:
         CT2 = (2 * np.sqrt(CT1)) - CT1
 
         if CT < 0:
-            CT = 0
+            CT = -CT
 
         if CT < CT2:
-            a = 0.5 * (1 - np.sqrt(max(0, 1 - CT)))
+            a = 0.5 * (1 - np.sqrt(1 - CT))
         else:
             a = 1 + ((CT - CT1) / (4 * (np.sqrt(CT1) - 1)))
+            print('correction!')
 
         return a
 
@@ -135,11 +136,21 @@ class BEM:
         return r_stations_norm
 
     def _baseline_twist(self, r_norm):
-        return -50 * r_norm + self.collective_blade_pitch + self.collective_blade_pitch_location * 50
+        x = r_norm
+        return (43.0463*x**4
+            -137.5923*x**3
+            +185.8450*x**2
+            -157.5377*x
+            +84.8556)#7.5 #-50 * r_norm + self.collective_blade_pitch + self.collective_blade_pitch_location * 50
 
     @staticmethod
     def _baseline_chord_norm(r_norm):
-        return 0.18 - 0.06 * r_norm #0.07/r_norm
+        x=r_norm
+        return 5*(-2.0151*x**4
+            +4.5464*x**3
+            -4.0353*x**2
+            +1.5364*x
+            -0.0543)# 0.18 - 0.06 * r_norm #0.07/r_norm
 
     def _build_blade_geometry(self, r_stations_norm, chord_control_points=None, twist_control_points=None):
 
@@ -165,7 +176,48 @@ class BEM:
             twist_stations.append(float(np.clip(twist_value, -5.0, 85.0)))
             chord_norm_stations.append(float(np.clip(chord_value, 0.001, 0.5)))
 
-        return twist_stations, chord_norm_stations
+        return  twist_stations, chord_norm_stations
+       #  return np.array([1.55240019, 1.54433479, 1.53628997, 1.5282667 , 1.52026593,
+       # 1.51228857, 1.50433554, 1.49640772, 1.48850598, 1.48063119,
+       # 1.47278417, 1.46496574, 1.4571767 , 1.44941781, 1.44168983,
+       # 1.4339935 , 1.42632952, 1.4186986 , 1.41110139, 1.40353854,
+       # 1.39601069, 1.38851843, 1.38106235, 1.37364302, 1.36626096,
+       # 1.35891671, 1.35161075, 1.34434356, 1.3371156 , 1.32992729,
+       # 1.32277905, 1.31567127, 1.30860432, 1.30157855, 1.29459428,
+       # 1.28765182, 1.28075147, 1.2738935 , 1.26707814, 1.26030564,
+       # 1.2535762 , 1.24689002, 1.24024728, 1.23364814, 1.22709273,
+       # 1.22058118, 1.21411361, 1.20769009, 1.20131071, 1.19497552,
+       # 1.18868458, 1.18243791, 1.17623553, 1.17007744, 1.16396364,
+       # 1.1578941 , 1.15186877, 1.14588762, 1.13995058, 1.13405758,
+       # 1.12820854, 1.12240336, 1.11664194, 1.11092416, 1.1052499 ,
+       # 1.09961902, 1.09403139, 1.08848684, 1.08298523, 1.07752638,
+       # 1.07211012, 1.06673627, 1.06140463, 1.05611502, 1.05086722,
+       # 1.04566103, 1.04049624, 1.03537262, 1.03028996, 1.02524802,
+       # 1.02024657, 1.01528537, 1.01036417, 1.00548274, 1.00064081,
+       # 0.99583815, 0.99107448, 0.98634956, 0.98166311, 0.97701488,
+       # 0.97240459, 0.96783198, 0.96329678, 0.95879871, 0.9543375 ,
+       # 0.94991287, 0.94552456, 0.94117226, 0.93685572, 0.93257465,
+       # 0.92832876, 0.92411779, 0.91994144]), np.array([0.09617323, 0.10089931, 0.10554297, 0.11010123, 0.11457123,
+       # 0.11895028, 0.12323584, 0.12742551, 0.13151707, 0.13550842,
+       # 0.13939765, 0.14318299, 0.14686282, 0.15043568, 0.15390026,
+       # 0.15725539, 0.16050005, 0.16363337, 0.16665461, 0.16956316,
+       # 0.17235856, 0.17504045, 0.17760861, 0.18006294, 0.18240344,
+       # 0.18463023, 0.18674352, 0.18874362, 0.19063094, 0.19240596,
+       # 0.19406927, 0.19562149, 0.19706335, 0.19839563, 0.19961915,
+       # 0.20073482, 0.20174356, 0.20264635, 0.20344421, 0.20413819,
+       # 0.20472935, 0.20521879, 0.20560761, 0.20589694, 0.2060879 ,
+       # 0.20618162, 0.20617921, 0.20608181, 0.2058905 , 0.20560637,
+       # 0.2052305 , 0.20476391, 0.20420761, 0.20356259, 0.20282976,
+       # 0.20201003, 0.20110424, 0.20011317, 0.19903757, 0.1978781 ,
+       # 0.19663537, 0.19530991, 0.19390218, 0.19241254, 0.19084129,
+       # 0.1891886 , 0.18745456, 0.18563913, 0.18374216, 0.18176337,
+       # 0.17970232, 0.17755843, 0.17533096, 0.17301895, 0.17062127,
+       # 0.16813654, 0.16556314, 0.16289916, 0.16014238, 0.15729022,
+       # 0.15433971, 0.1512874 , 0.14812932, 0.14486086, 0.14147673,
+       # 0.13797075, 0.13433575, 0.13056334, 0.12664364, 0.12256498,
+       # 0.11831337, 0.11387198, 0.10922022, 0.10433258, 0.09917691,
+       # 0.09371179, 0.08788244, 0.08161394, 0.07479925, 0.0672762 ,
+       # 0.05877739, 0.04880038, 0.03614725]) # twist_stations, chord_norm_stations
 
     def blade_element(
         self,
@@ -416,7 +468,7 @@ class BEM:
                     solidity_penalty += 10.0 * (local_sigma - 0.15) ** 2 * r**2
 
 
-            return -self.CP + 0*solidity_penalty
+            return self.CP + 0*solidity_penalty
 
         result = minimize(
             objective,
@@ -424,7 +476,7 @@ class BEM:
             method="SLSQP",
             bounds=bounds,
             options={"maxiter": 120, "ftol": 1e-5, "disp": True, "verbose": 1},
-            callback=lambda result: print(f"Current Cost: {-objective(result):.6f}")
+            callback=lambda result: print(f"Current Cost: {objective(result):.6f}")
         )
 
         chord_opt, twist_opt = unpack(result.x)
@@ -448,7 +500,7 @@ class BEM:
             "CT": float(self.CT),
             "CQ": float(self.CQ),
             "CP": float(self.CP),
-            "eta": float(self.J * self.CT / max(self.CP, 1e-8)),
+            "eta": float(self.J * self.CT / self.CP),
             "r_over_R": np.array(self.r_R_list),
             "chord_distribution": np.array(
                 [
@@ -497,15 +549,15 @@ if __name__ == "__main__":
     print(f"Baseline: CT={bem.CT:.4f}, CP={bem.CP:.4f}, eta={bem.J * bem.CT / max(bem.CP, 1e-8):.4f}")
 
     optimization_result = bem.optimize_bezier_geometry(
-        n_control_points=10,
-        resolution=70,
+        n_control_points=4,
+        resolution=100,
         spacing="cosine",
         use_prandtl=True,
         optimize_twist_only=False,
     )
     print(
         "Optimized:",
-        f"CT={optimization_result['CT']:.4f}, CP={optimization_result['CP']:.4f}, eta={optimization_result['eta']:.4f}, success={optimization_result['success']}"
+        f"CT={optimization_result['CT']:.4f}, CP={optimization_result['CP']:.4f}, eta={optimization_result['eta']:.4f}, success={optimization_result['success'], {optimization_result['message']}}",
     )
 
     plot(
