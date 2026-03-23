@@ -166,6 +166,8 @@ class BEM:
         self.dCQ_dr_list = []
         self.dCP_dr_list = []
         self.iterations_list = []
+        self.CT_conv_list = []
+        self.CT_conv_ind=[]
         self.p_stag_up_inf_list = []
         self.p_stag_up_list = []
         self.p_stag_down_list = []
