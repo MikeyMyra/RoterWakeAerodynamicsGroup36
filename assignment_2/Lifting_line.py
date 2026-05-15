@@ -1,0 +1,484 @@
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+import numpy as np
+
+from plotter import plot
+
+
+class BEM:
+    
+    def __init__(self, J):
+        
+        # Rotor specs (absolute values)
+        self.radius = 0.7  # meters
+        self.n_blades = 6
+        self.blade_start_fraction = 0.25  # Fraction of radius (0-1)
+        self.collective_blade_pitch = 46  # degrees
+        self.collective_blade_pitch_location = 0.7  # Fraction of radius (0-1)
+        
+        # Operational specs
+        self.U_inf = 60  # m/s
+        self.rpm = 60 * (self.U_inf / (J * 2 * self.radius))
+        self.altitude = 2000  # meters
+        self.incidence = 0
+        self.rotor_yaw = 0
+        
+        # Airfoil data
+        self.AoA, self.cl, self.cd, self.cm = self._get_airfoil()
+        self.rho = self._get_isa_density(self.altitude)
+    
+    @staticmethod
+    def _get_airfoil():
+        
+        data = []
+        with open("RoterWakeAerodynamicsGroup36\\assignment_2\\ARAD8pct_polar.txt", "r") as file:
+            for line in file:
+                row = line.strip().split()
+                data.append(row)
+        data = data[2:]
+        
+        AoA = [float(row[0]) for row in data]
+        cl  = [float(row[1]) for row in data]
+        cd  = [float(row[2]) for row in data]
+        cm  = [float(row[3]) for row in data]
+        
+        return AoA, cl, cd, cm
+    
+    @staticmethod
+    def _get_isa_density(h): 
+        
+        T0, p0, L, R, g = 288.15, 101325, 0.0065, 287.05, 9.80665
+        
+        T = T0 - L*h
+        p = p0 * (T/T0)**(g/(R*L))
+        rho = p/(R*T)
+        
+        return rho
+    
+    @staticmethod
+    def _apply_glauert_correction(CT):
+        
+        CT1 = 1.816
+        CT2 = (2 * np.sqrt(CT1)) - CT1
+        
+        if CT < 0:
+            CT = 0
+        
+        if CT < CT2:
+            a = (1/2) * (1 - np.sqrt(max(0, 1 - CT)))
+        else:
+            a = 1 + ((CT - CT1) / (4 * (np.sqrt(CT1) - 1)))
+        
+        return a
+    
+    def _calculate_prandtl_factor(self, r_norm, a):
+        
+        mu = r_norm
+        mu_root = self.blade_start_fraction
+        
+        if mu < mu_root:
+            return 1.0
+        
+        if mu >= 1.00:
+            return 0.0
+        
+        if a >= 1.00 or a <= 0.0:
+            a = 0.5
+        
+        omega = (2 * np.pi * self.rpm) / 60
+        lambda_local = (omega * r_norm * self.radius) / self.U_inf
+        
+        try:
+            exponent_tip = -(self.n_blades / 2) * ((1 - mu) / mu) * np.sqrt(1 + (mu**2 * lambda_local**2) / ((1 - a)**2))
+            #exponent_tip = np.clip(exponent_tip, -10, 0)
+            f_tip = (2 / np.pi) * np.arccos(np.exp(exponent_tip))
+        except:
+            f_tip = 1.
+        
+        try:
+            exponent_root = -(self.n_blades / 2) * ((mu - mu_root) / mu) * np.sqrt(1 + (mu**2 * lambda_local**2) / ((1 - a)**2))
+            #exponent_root = np.clip(exponent_root, -10, 0)
+            f_root = (2 / np.pi) * np.arccos(np.exp(exponent_root))
+        except:
+            f_root = 1.0
+        
+        F_total = f_tip * f_root
+        #F_total = max(F_total, 0.0001)
+        
+        return F_total
+    
+    def biot_savart(self,X1,X2,Xp,gamma):
+        eps=1e-10
+        R1=np.sqrt((Xp[0]-X1[0])**2+(Xp[1]-X1[1])**2+(Xp[2]-X1[2])**2)
+        R1=max(R1,eps)
+        R2=np.sqrt((Xp[0]-X2[0])**2+(Xp[1]-X2[1])**2+(Xp[2]-X2[2])**2)
+        R2=max(R2,eps)
+        R12x=(Xp[1]-X1[1])*(Xp[2]-X2[2])-(Xp[2]-X1[2])*(Xp[1]-X2[1])
+        R12y=-(Xp[0]-X1[0])*(Xp[2]-X2[2])+(Xp[2]-X1[2])*(Xp[0]-X2[0])
+        R12z=(Xp[0]-X1[0])*(Xp[1]-X2[1])-(Xp[1]-X1[1])*(Xp[0]-X2[0])
+        R12sqrt=R12x**2+R12y**2+R12z**2
+        R12sqrt=max(R12sqrt,eps)
+        R01=(X2[0]-X1[0])*(Xp[0]-X1[0])+(X2[1]-X1[1])*(Xp[1]-X1[1])+(X2[2]-X1[2])*(Xp[2]-X1[2])
+        R02=(X2[0]-X1[0])*(Xp[0]-X2[0])+(X2[1]-X1[1])*(Xp[1]-X2[1])+(X2[2]-X1[2])*(Xp[2]-X2[2])
+        K=1/(4*np.pi*R12sqrt)*(R01/R1-R02/R2)
+        C_ind=[float(K*(R12x)),float(K*(R12y)),float(K*(R12z))]
+        U_ind=[float(K*(R12x))*gamma,float(K*(R12y))*gamma,float(K*(R12z))*gamma]
+        # if U_ind[0]==np.nan:
+        #     U_ind=[0,0,0]
+        # np.where(U_ind==np.nan,0)
+        
+        return C_ind,U_ind
+    
+    
+    def calc_ind_filiment(self,Xp,r,dt=0.1,tend=5):
+
+        omega=1
+        # self.yarr=r*np.sin(omega*self.tlst)
+        # self.zarr=r*np.cos(omega*self.tlst)
+        
+        
+
+        uind=[]
+        vind=[]
+        wind=[]
+        cuind=[]
+        cvind=[]
+        cwind=[]
+
+        for ij in range(len(self.tlst)-1):
+            C_ind,uvwind=self.biot_savart([self.xarr[ij],self.yarr[ij],self.zarr[ij]],[self.xarr[ij+1],self.yarr[ij+1],self.zarr[ij+1]],Xp,1)
+            uind.append(uvwind[0])
+            vind.append(uvwind[1])
+            wind.append(uvwind[2])
+            cuind.append(C_ind[0])
+            cvind.append(C_ind[1])
+            cwind.append(C_ind[2])
+
+        fig=plt.figure()
+        fig2=plt.figure()
+        ax=fig.subplots(2,2)
+        ax2=fig2.add_subplot(projection='3d')
+        uind=[]
+        for ij in range(len(self.tlst)-1):
+            uind.append(self.biot_savart([self.xarr[ij],self.yarr[ij],self.zarr[ij]],[self.xarr[ij+1],self.yarr[ij+1],self.zarr[ij+1]],Xp,1)[0])
+            ax[0,0].plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]])
+            ax[0,1].plot([self.xarr[ij],self.xarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]])
+            ax[1,0].plot([self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]])
+            ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
+            # ax2.plot([xarr2[i],xarr2[ij+1]],[yarr2[i],yarr2[ij+1]],[zarr2[i],zarr2[i+1]],color='tab:blue')
+        ax[1,1].plot(uind)
+        ax[1,1].grid()
+        # surf=ax.plot_surface(mesh.X_nodes,mesh.Y_nodes,IC,cmap=cm.coolwarm)
+        ax2.scatter(Xp[0],Xp[1],Xp[2])
+        print(np.sum(uind))
+        plt.show()
+
+        # print(np.sum(uind))
+        return [sum(cuind),sum(cvind),sum(cwind)],[sum(uind),sum(vind),sum(wind)]
+
+    def Lifting_line(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
+        cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
+        cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
+        
+        omega = (2 * np.pi * self.rpm) / 60
+
+        # Generate normalized radial stations (0 to 1)
+        if spacing == 'cosine': # cosine
+            theta = np.linspace(0, np.pi, resolution + 1)
+            r_normalized_temp = 0.5 * (1 - np.cos(theta))
+            r_stations_norm = self.blade_start_fraction + (1 - self.blade_start_fraction) * r_normalized_temp
+        else:  # linear
+            r_stations_norm = np.linspace(self.blade_start_fraction, 1, resolution + 1)
+
+        
+        # Regenerate normalized blade properties at new radial stations
+        twist_stations = []
+        chord_norm_stations = []
+        r_stations_norm = np.insert(r_stations_norm, 0, 2*r_stations_norm[0]-r_stations_norm[1])
+        r_stations_norm = np.insert(r_stations_norm, 0, 0)
+
+        for r_norm in r_stations_norm:
+            if r_norm > self.blade_start_fraction:
+                twist_stations.append(-50 * r_norm + 35 + self.collective_blade_pitch + self.collective_blade_pitch_location * 50 - 35 )
+                chord_norm_stations.append(0.18 - 0.06 * r_norm)
+            else:
+                twist_stations.append(0)
+                chord_norm_stations.append(0)
+
+        # Calculate dr in absolute units
+        r_stations_abs = r_stations_norm * self.radius
+        dr =  np.diff(r_stations_abs)
+
+        A_disk = np.pi * self.radius**2
+
+
+        self.circulation_list=np.ones_like(r_stations_norm)
+        print(self.circulation_list)
+        iteration=0
+        A=np.zeros((resolution,resolution+1))
+
+        tend=5
+        dt=1
+        self.tlst=np.arange(0,tend,dt)
+        Uwake=10
+        self.xarr=self.tlst*Uwake
+
+        
+        omega=1
+        # for iter in range(max_iterations):
+        for i in range(resolution+1):
+            i=40
+            r_vortex=r_stations_abs[i]
+
+            self.yarr=r_vortex*np.sin(omega*self.tlst)
+            self.zarr=r_vortex*np.cos(omega*self.tlst)
+            for j in range(resolution):
+                j=50
+
+                r_p=r_stations_abs[j]
+                # print(self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0])
+                A[j,i]=self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0]
+
+        # u_ind=A@self.circulation_list
+
+
+
+        pcm=plt.imshow(A)
+        plt.colorbar(pcm)
+        plt.show()
+
+
+
+        
+
+    def blade_element(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
+        
+        cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
+        cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
+        
+        omega = (2 * np.pi * self.rpm) / 60
+        
+        # Generate normalized radial stations (0 to 1)
+        if spacing == 'cosine': # cosine
+            theta = np.linspace(0, np.pi, resolution + 1)
+            r_normalized_temp = 0.5 * (1 - np.cos(theta))
+            r_stations_norm = self.blade_start_fraction + (1 - self.blade_start_fraction) * r_normalized_temp
+        else:  # linear
+            r_stations_norm = np.linspace(self.blade_start_fraction, 1, resolution + 1)
+        
+        # Regenerate normalized blade properties at new radial stations
+        twist_stations = []
+        chord_norm_stations = []
+        r_stations_norm = np.insert(r_stations_norm, 0, 2*r_stations_norm[0]-r_stations_norm[1])
+        r_stations_norm = np.insert(r_stations_norm, 0, 0)
+        
+        for r_norm in r_stations_norm:
+            if r_norm > self.blade_start_fraction:
+                twist_stations.append(-50 * r_norm + 35 + self.collective_blade_pitch + self.collective_blade_pitch_location * 50 - 35 )
+                chord_norm_stations.append(0.18 - 0.06 * r_norm)
+            else:
+                twist_stations.append(0)
+                chord_norm_stations.append(0)
+        
+        # Calculate dr in absolute units
+        r_stations_abs = r_stations_norm * self.radius
+        dr =  np.diff(r_stations_abs)
+        #dr = np.append(dr, dr[-1])
+        #dr = np.delete(dr, 0)
+        
+        A_disk = np.pi * self.radius**2
+        
+        # Initialize tracking lists (all use NORMALIZED radius 0-1)
+        self.r_R_list = []
+        self.a_list = []
+        self.a_prime_list = []
+        self.alpha_list = []
+        self.phi_list = []
+        self.cl_list = []
+        self.cd_list = []
+        self.V_axial_list = []
+        self.V_tangential_list = []
+        self.V_effective_list = []
+        self.lift_list = []
+        self.drag_list = []
+        self.F_axial_list = []
+        self.F_azimuth_list = []
+        self.circulation_list = []
+        self.F_prandtl_list = []
+        self.dCT_dr_list = []
+        self.CT_conv_list = []
+        self.CT_conv_ind=[]
+        self.dCQ_dr_list = []
+        self.dCP_dr_list = []
+        self.iterations_list = []
+        
+        # Convergence tracking
+        if track_convergence:
+            self.convergence_history = {'CT': [], 'CQ': [], 'iteration': []}
+        
+        dT_total = 0
+        dQ_total = 0
+        
+        for i, r_norm in enumerate(r_stations_norm):
+
+            a = 0.3
+            a_prime = 0.
+            
+            # Get absolute radius for calculations
+            r_abs = r_norm * self.radius
+            
+            if r_norm <= self.blade_start_fraction:
+                self.r_R_list.append(r_norm)
+                self.a_list.append(0)
+                self.a_prime_list.append(0)
+                self.alpha_list.append(0)
+                self.phi_list.append(0)
+                self.cl_list.append(0)
+                self.cd_list.append(0)
+                self.V_axial_list.append(0)
+                self.V_tangential_list.append(0)
+                self.V_effective_list.append(0)
+                self.lift_list.append(0)
+                self.drag_list.append(0)
+                self.F_axial_list.append(0)
+                self.F_azimuth_list.append(0)
+                self.circulation_list.append(0)
+                self.F_prandtl_list.append(0)
+                self.dCT_dr_list.append(0)
+                self.dCQ_dr_list.append(0)
+                self.dCP_dr_list.append(0)
+                self.iterations_list.append(0)
+                continue
+            
+            iter_count = 0
+            converged = False
+            for iteration in range(max_iterations):
+                iter_count += 1
+                
+                # Velocities (absolute)
+                V_axial = self.U_inf * (1 - a)
+                V_tangential = omega * r_abs * (1 + a_prime)
+                V_effective = np.sqrt(V_axial**2 + V_tangential**2)
+                
+                # Get blade properties (convert normalized chord to absolute)
+                chord_abs = chord_norm_stations[i] * self.radius
+                theta_deg = twist_stations[i]
+                theta_rad = np.deg2rad(theta_deg)
+                
+                # Flow angles
+                phi = np.arctan2(V_axial, V_tangential)
+                alpha = np.rad2deg(theta_rad - phi)
+                
+                # Airfoil coefficients
+                cl = float(cl_interp(alpha))
+                cd = float(cd_interp(alpha))
+                
+                # Forces per unit length (absolute)
+                lift = 0.5 * self.rho * V_effective**2 * chord_abs * cl
+                drag = 0.5 * self.rho * V_effective**2 * chord_abs * cd
+                
+                # Apply Prandtl correction if enabled
+                if use_prandtl:
+                    F_prandtl = self._calculate_prandtl_factor(r_norm, a)
+                else:
+                    F_prandtl = 1.0
+                
+                # Corrected forces
+                F_azimuth = (lift * np.sin(phi) - drag * np.cos(phi)) * F_prandtl
+                F_axial = (lift * np.cos(phi) + drag * np.sin(phi)) * F_prandtl
+                
+                # Thrust coefficient
+
+                A_a = 2 * np.pi * r_abs * dr[i-1]
+                C_T = (F_axial * self.n_blades * dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a)
+                if i==20 and iter_count%2==0:
+                    self.CT_conv_list.append(C_T)
+                    self.CT_conv_ind.append(iter_count)
+
+                
+                # Apply Glauert correction for axial induction
+                a_calc = self._apply_glauert_correction(C_T) # Lucas: Is this necessary? Our propellor is not heavily loaded right?
+
+                a_calc = np.clip(a_calc, 0, 0.95)
+                # Azimuthal induction
+                a_prime_calc = (F_azimuth * self.n_blades) / (2 * self.rho * (2 * np.pi * r_abs) * self.U_inf**2 * (1 - a_calc) * omega * r_abs)
+                
+                # Check convergence
+                if abs(a_calc - a) < tolerance and abs(a_prime_calc - a_prime) < tolerance:
+                    converged = True
+                    break
+                
+                # Relaxation of iterative variables
+                a = 0.75 * a + 0.25 * a_calc
+                a_prime = 0.75 * a_prime + 0.25 * a_prime_calc
+
+
+            
+            # Calculate circulation
+            circulation = 0.5 * V_effective * chord_abs * cl
+            
+            # Accumulate totals
+            dT_total += F_axial * dr[i-1] * self.n_blades
+            dQ_total += F_azimuth * r_abs * dr[i-1] * self.n_blades
+            
+            # Differential coefficients
+            dCT = C_T
+            dCQ = (F_azimuth * self.n_blades * r_abs * dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a * self.radius)
+            dCP = dCQ * omega * self.radius / self.U_inf
+            
+            # Store values (using NORMALIZED radius)
+            self.r_R_list.append(r_norm)
+            self.a_list.append(a_calc)
+            self.a_prime_list.append(a_prime_calc)
+            self.alpha_list.append(alpha)
+            self.phi_list.append(np.rad2deg(phi))
+            self.cl_list.append(cl)
+            self.cd_list.append(cd)
+            self.V_axial_list.append(V_axial)
+            self.V_tangential_list.append(V_tangential)
+            self.V_effective_list.append(V_effective)
+            self.lift_list.append(lift)
+            self.drag_list.append(drag)
+            self.F_axial_list.append(F_axial)
+            self.F_azimuth_list.append(F_azimuth)
+            self.circulation_list.append(circulation)
+            self.F_prandtl_list.append(F_prandtl)
+            self.dCT_dr_list.append(dCT)
+            self.dCQ_dr_list.append(dCQ)
+            self.dCP_dr_list.append(dCP)
+            self.iterations_list.append(iter_count)
+            
+            # Track convergence if requested
+            if track_convergence:
+                CT_current = dT_total / (0.5 * self.rho * self.U_inf**2 * A_disk)
+                CQ_current = dQ_total / (0.5 * self.rho * self.U_inf**2 * A_disk * self.radius)
+                self.convergence_history['CT'].append(CT_current)
+                self.convergence_history['CQ'].append(CQ_current)
+                self.convergence_history['iteration'].append(i)
+
+            if converged == False:
+                print(
+                    f"Warning: Blade element method did not converge within the maximum iterations for station {r_abs} for spacing {spacing}.")
+        
+        # Total coefficients
+        self.CT = dT_total / (0.5 * self.rho * self.U_inf**2 * A_disk)
+        self.CQ = dQ_total / (0.5 * self.rho * self.U_inf**2 * A_disk * self.radius)
+        self.CP = self.CQ * omega * self.radius / self.U_inf
+
+
+
+if __name__ == "__main__":
+    
+    bem = BEM(J=2)
+    # print(bem.calc_ind_filiment([0,0,0.8],0.4))
+    bem.Lifting_line(resolution=100)
+    # bem.blade_element(resolution=100, use_prandtl=False)
+    
+    # plot(
+    #     "Spanwise Distribution: Angle of Attack",
+    #     bem.r_R_list, [bem.alpha_list],
+    #     ["Angle of Attack (α)"],
+    #     "r/R", "α (deg)"
+    # )
+    
+    # plt.show()
