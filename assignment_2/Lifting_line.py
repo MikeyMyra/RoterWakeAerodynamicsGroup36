@@ -31,7 +31,7 @@ class BEM:
     def _get_airfoil():
         
         data = []
-        with open("RoterWakeAerodynamicsGroup36\\assignment_2\\ARAD8pct_polar.txt", "r") as file:
+        with open("assignment_2\\ARAD8pct_polar.txt", "r") as file:
             for line in file:
                 row = line.strip().split()
                 data.append(row)
@@ -107,7 +107,7 @@ class BEM:
         
         return F_total
     
-    def biot_savart(self,X1,X2,Xp,gamma):
+    def biot_savart(self,X1,X2,Xp,gamma): #TODO: Add CORE like in answer_from_the_github_page.js
         eps=1e-10
         R1=np.sqrt((Xp[0]-X1[0])**2+(Xp[1]-X1[1])**2+(Xp[2]-X1[2])**2)
         R1=max(R1,eps)
@@ -225,6 +225,8 @@ class BEM:
 
         
         omega=1
+        # TODO: Hi @marnick1268 take a look at answer_from_the_github_page.js, which I took from the code they gave us as an example to test their model. It works but is in Javascript but it is still readable and provides all necessary steps
+        # that we need to do.
         # for iter in range(max_iterations):
         for i in range(resolution+1):
             i=40
