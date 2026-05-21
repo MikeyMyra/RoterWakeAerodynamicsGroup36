@@ -31,7 +31,7 @@ class BEM:
     def _get_airfoil():
         
         data = []
-        with open("RoterWakeAerodynamicsGroup36\\assignment_2\\ARAD8pct_polar.txt", "r") as file:
+        with open("assignment_2\ARAD8pct_polar.txt", "r") as file:
             for line in file:
                 row = line.strip().split()
                 data.append(row)
@@ -130,23 +130,33 @@ class BEM:
         return C_ind,U_ind
     
     
-    def calc_ind_filiment(self,Xp,r,dt=0.1,tend=5):
+    def calc_ind_filiment(self,Xp,r,dt=0.1,tend=5,plot=True):
 
-        omega=1
         # self.yarr=r*np.sin(omega*self.tlst)
         # self.zarr=r*np.cos(omega*self.tlst)
         
         
+        C_ind,uvwind=self.biot_savart([0,0,r-self.dr_used/2],[0,0,r+self.dr_used/2],Xp,1)
 
-        uind=[]
-        vind=[]
-        wind=[]
-        cuind=[]
-        cvind=[]
-        cwind=[]
+        uind=[uvwind[0]]
+        vind=[uvwind[1]]
+        wind=[uvwind[2]]
+        cuind=[C_ind[0]]
+        cvind=[C_ind[1]]
+        cwind=[C_ind[2]]
+        # C_ind,uvwind=self.biot_savart([0,0,r-self.dr_used],[0,0,r+self.dr_used],Xp,1)
 
         for ij in range(len(self.tlst)-1):
             C_ind,uvwind=self.biot_savart([self.xarr[ij],self.yarr[ij],self.zarr[ij]],[self.xarr[ij+1],self.yarr[ij+1],self.zarr[ij+1]],Xp,1)
+            
+            uind.append(uvwind[0])
+            vind.append(uvwind[1])
+            wind.append(uvwind[2])
+            cuind.append(C_ind[0])
+            cvind.append(C_ind[1])
+            cwind.append(C_ind[2])
+            C_ind,uvwind=self.biot_savart([self.xarr[ij+1],self.yarr2[ij+1],self.zarr2[ij+1]],[self.xarr[ij],self.yarr2[ij],self.zarr2[ij]],Xp,1)
+
             uind.append(uvwind[0])
             vind.append(uvwind[1])
             wind.append(uvwind[2])
@@ -154,33 +164,86 @@ class BEM:
             cvind.append(C_ind[1])
             cwind.append(C_ind[2])
 
-        fig=plt.figure()
-        fig2=plt.figure()
-        ax=fig.subplots(2,2)
-        ax2=fig2.add_subplot(projection='3d')
-        uind=[]
-        for ij in range(len(self.tlst)-1):
-            uind.append(self.biot_savart([self.xarr[ij],self.yarr[ij],self.zarr[ij]],[self.xarr[ij+1],self.yarr[ij+1],self.zarr[ij+1]],Xp,1)[0])
-            ax[0,0].plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]])
-            ax[0,1].plot([self.xarr[ij],self.xarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]])
-            ax[1,0].plot([self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]])
-            ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
-            # ax2.plot([xarr2[i],xarr2[ij+1]],[yarr2[i],yarr2[ij+1]],[zarr2[i],zarr2[i+1]],color='tab:blue')
-        ax[1,1].plot(uind)
-        ax[1,1].grid()
-        # surf=ax.plot_surface(mesh.X_nodes,mesh.Y_nodes,IC,cmap=cm.coolwarm)
-        ax2.scatter(Xp[0],Xp[1],Xp[2])
-        print(np.sum(uind))
-        plt.show()
+        
+        # uind=[]
+
+        if plot==True:
+            fig=plt.figure()
+            fig2=plt.figure()
+            ax=fig.subplots(2,2)
+            ax2=fig2.add_subplot(projection='3d')
+            for ij in range(len(self.tlst)-1):
+                
+                # uind.append(self.biot_savart([self.xarr[ij],self.yarr[ij],self.zarr[ij]],[self.xarr[ij+1],self.yarr[ij+1],self.zarr[ij+1]],Xp,1)[0])
+                ax[0,0].plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]])
+                ax[0,1].plot([self.xarr[ij],self.xarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]])
+                ax[1,0].plot([self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]])
+                ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
+                ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr2[ij],self.yarr2[ij+1]],[self.zarr2[ij],self.zarr2[ij+1]],color='tab:blue')
+                
+                # ax2.plot([xarr2[i],xarr2[ij+1]],[yarr2[i],yarr2[ij+1]],[zarr2[i],zarr2[i+1]],color='tab:blue')
+            ax[1,1].plot(uind)
+            ax[1,1].grid()
+            # surf=ax.plot_surface(mesh.X_nodes,mesh.Y_nodes,IC,cmap=cm.coolwarm)
+            ax2.scatter(Xp[0],Xp[1],Xp[2])
+            print(np.sum(uind))
+            plt.show()
 
         # print(np.sum(uind))
         return [sum(cuind),sum(cvind),sum(cwind)],[sum(uind),sum(vind),sum(wind)]
 
-    def Lifting_line(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
+
+    def Make_ind_matrix(self):
+
+        A=np.zeros((self.resolution,self.resolution))
+
+        tend=5
+        dt=0.1
+        self.tlst=np.arange(0,tend,dt)
+        # Uwake=10
+        self.omega=1
+
+
+        self.xarr=self.tlst*self.V_axial
+
+        
+        
+
+        r_stations_abs_circ=self.r_stations_abs[:-1]+self.dr/2
+        # for iter in range(max_iterations):
+        for i in range(self.resolution):
+            print(i)
+            i=4
+            r_vortex=r_stations_abs_circ[i]
+            self.dr_used=self.dr[i]
+
+            self.yarr=(r_vortex+1/2*self.dr_used)*np.sin(self.omega*self.tlst)
+            self.zarr=(r_vortex+1/2*self.dr_used)*np.cos(self.omega*self.tlst)
+            self.yarr2=(r_vortex-1/2*self.dr_used)*np.sin(self.omega*self.tlst)
+            self.zarr2=(r_vortex-1/2*self.dr_used)*np.cos(self.omega*self.tlst)
+            for j in range(self.resolution):
+                j=5
+
+                r_p=r_stations_abs_circ[j]
+                # print(self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0])
+                A[j,i]=self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0]
+
+        # u_ind=A@self.circulation_list
+
+
+
+        pcm=plt.imshow(A)
+        plt.colorbar(pcm)
+        plt.show()
+
+
+
+    def Lifting_line(self, resolution=5, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
         cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
         cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
+        self.resolution=resolution
         
-        omega = (2 * np.pi * self.rpm) / 60
+        self.omega = (2 * np.pi * self.rpm) / 60
 
         # Generate normalized radial stations (0 to 1)
         if spacing == 'cosine': # cosine
@@ -205,9 +268,9 @@ class BEM:
                 twist_stations.append(0)
                 chord_norm_stations.append(0)
 
-        # Calculate dr in absolute units
-        r_stations_abs = r_stations_norm * self.radius
-        dr =  np.diff(r_stations_abs)
+        # Calculate self.dr in absolute units
+        self.r_stations_abs = r_stations_norm * self.radius
+        self.dr =  np.diff(self.r_stations_abs)
 
         A_disk = np.pi * self.radius**2
 
@@ -215,37 +278,12 @@ class BEM:
         self.circulation_list=np.ones_like(r_stations_norm)
         print(self.circulation_list)
         iteration=0
-        A=np.zeros((resolution,resolution+1))
+        a=0.05
+        self.V_axial = 10#self.U_inf * (1 - a)
 
-        tend=5
-        dt=1
-        self.tlst=np.arange(0,tend,dt)
-        Uwake=10
-        self.xarr=self.tlst*Uwake
-
+        self.Make_ind_matrix()
         
-        omega=1
-        # for iter in range(max_iterations):
-        for i in range(resolution+1):
-            i=40
-            r_vortex=r_stations_abs[i]
-
-            self.yarr=r_vortex*np.sin(omega*self.tlst)
-            self.zarr=r_vortex*np.cos(omega*self.tlst)
-            for j in range(resolution):
-                j=50
-
-                r_p=r_stations_abs[j]
-                # print(self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0])
-                A[j,i]=self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0]
-
-        # u_ind=A@self.circulation_list
-
-
-
-        pcm=plt.imshow(A)
-        plt.colorbar(pcm)
-        plt.show()
+        
 
 
 
@@ -280,11 +318,11 @@ class BEM:
                 twist_stations.append(0)
                 chord_norm_stations.append(0)
         
-        # Calculate dr in absolute units
+        # Calculate self.dr in absolute units
         r_stations_abs = r_stations_norm * self.radius
-        dr =  np.diff(r_stations_abs)
-        #dr = np.append(dr, dr[-1])
-        #dr = np.delete(dr, 0)
+        self.dr =  np.diff(r_stations_abs)
+        #self.dr = np.append(self.dr, self.dr[-1])
+        #self.dr = np.delete(self.dr, 0)
         
         A_disk = np.pi * self.radius**2
         
@@ -300,16 +338,16 @@ class BEM:
         self.V_tangential_list = []
         self.V_effective_list = []
         self.lift_list = []
-        self.drag_list = []
+        self.self.drag_list = []
         self.F_axial_list = []
         self.F_azimuth_list = []
         self.circulation_list = []
         self.F_prandtl_list = []
-        self.dCT_dr_list = []
+        self.dCT_self.dr_list = []
         self.CT_conv_list = []
         self.CT_conv_ind=[]
-        self.dCQ_dr_list = []
-        self.dCP_dr_list = []
+        self.dCQ_self.dr_list = []
+        self.dCP_self.dr_list = []
         self.iterations_list = []
         
         # Convergence tracking
@@ -339,14 +377,14 @@ class BEM:
                 self.V_tangential_list.append(0)
                 self.V_effective_list.append(0)
                 self.lift_list.append(0)
-                self.drag_list.append(0)
+                self.self.drag_list.append(0)
                 self.F_axial_list.append(0)
                 self.F_azimuth_list.append(0)
                 self.circulation_list.append(0)
                 self.F_prandtl_list.append(0)
-                self.dCT_dr_list.append(0)
-                self.dCQ_dr_list.append(0)
-                self.dCP_dr_list.append(0)
+                self.dCT_self.dr_list.append(0)
+                self.dCQ_self.dr_list.append(0)
+                self.dCP_self.dr_list.append(0)
                 self.iterations_list.append(0)
                 continue
             
@@ -375,7 +413,7 @@ class BEM:
                 
                 # Forces per unit length (absolute)
                 lift = 0.5 * self.rho * V_effective**2 * chord_abs * cl
-                drag = 0.5 * self.rho * V_effective**2 * chord_abs * cd
+                self.drag = 0.5 * self.rho * V_effective**2 * chord_abs * cd
                 
                 # Apply Prandtl correction if enabled
                 if use_prandtl:
@@ -384,13 +422,13 @@ class BEM:
                     F_prandtl = 1.0
                 
                 # Corrected forces
-                F_azimuth = (lift * np.sin(phi) - drag * np.cos(phi)) * F_prandtl
-                F_axial = (lift * np.cos(phi) + drag * np.sin(phi)) * F_prandtl
+                F_azimuth = (lift * np.sin(phi) - self.drag * np.cos(phi)) * F_prandtl
+                F_axial = (lift * np.cos(phi) + self.drag * np.sin(phi)) * F_prandtl
                 
                 # Thrust coefficient
 
-                A_a = 2 * np.pi * r_abs * dr[i-1]
-                C_T = (F_axial * self.n_blades * dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a)
+                A_a = 2 * np.pi * r_abs * self.dr[i-1]
+                C_T = (F_axial * self.n_blades * self.dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a)
                 if i==20 and iter_count%2==0:
                     self.CT_conv_list.append(C_T)
                     self.CT_conv_ind.append(iter_count)
@@ -418,12 +456,12 @@ class BEM:
             circulation = 0.5 * V_effective * chord_abs * cl
             
             # Accumulate totals
-            dT_total += F_axial * dr[i-1] * self.n_blades
-            dQ_total += F_azimuth * r_abs * dr[i-1] * self.n_blades
+            dT_total += F_axial * self.dr[i-1] * self.n_blades
+            dQ_total += F_azimuth * r_abs * self.dr[i-1] * self.n_blades
             
             # Differential coefficients
             dCT = C_T
-            dCQ = (F_azimuth * self.n_blades * r_abs * dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a * self.radius)
+            dCQ = (F_azimuth * self.n_blades * r_abs * self.dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a * self.radius)
             dCP = dCQ * omega * self.radius / self.U_inf
             
             # Store values (using NORMALIZED radius)
@@ -438,14 +476,14 @@ class BEM:
             self.V_tangential_list.append(V_tangential)
             self.V_effective_list.append(V_effective)
             self.lift_list.append(lift)
-            self.drag_list.append(drag)
+            self.self.drag_list.append(self.drag)
             self.F_axial_list.append(F_axial)
             self.F_azimuth_list.append(F_azimuth)
             self.circulation_list.append(circulation)
             self.F_prandtl_list.append(F_prandtl)
-            self.dCT_dr_list.append(dCT)
-            self.dCQ_dr_list.append(dCQ)
-            self.dCP_dr_list.append(dCP)
+            self.dCT_self.dr_list.append(dCT)
+            self.dCQ_self.dr_list.append(dCQ)
+            self.dCP_self.dr_list.append(dCP)
             self.iterations_list.append(iter_count)
             
             # Track convergence if requested
