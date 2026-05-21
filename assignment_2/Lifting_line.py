@@ -107,7 +107,7 @@ class BEM:
         
         return F_total
     
-    def biot_savart(self,X1,X2,Xp,gamma):
+    def biot_savart(self,X1,X2,Xp,gamma): #TODO: Add CORE like in answer_from_the_github_page.js
         eps=1e-10
         R1=np.sqrt((Xp[0]-X1[0])**2+(Xp[1]-X1[1])**2+(Xp[2]-X1[2])**2)
         R1=max(R1,eps)

@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def biot_savart(X1,X2,Xp,gamma):
+def biot_savart(X1,X2,Xp,gamma): #TODO: Add CORE like in answer_from_the_github_page.js
     R1=np.sqrt((Xp[0]-X1[0])**2+(Xp[1]-X1[1])**2+(Xp[2]-X1[2])**2)
     R2=np.sqrt((Xp[0]-X2[0])**2+(Xp[1]-X2[1])**2+(Xp[2]-X2[2])**2)
     R12x=(Xp[1]-X1[1])*(Xp[2]-X2[2])-(Xp[2]-X1[2])*(Xp[1]-X2[1])
