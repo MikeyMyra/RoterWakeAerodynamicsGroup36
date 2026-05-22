@@ -194,7 +194,7 @@ class BEM:
         return [sum(cuind),sum(cvind),sum(cwind)],[sum(uind),sum(vind),sum(wind)]
 
 
-    def Make_ind_matrix(self):
+    def Make_ind_matrix(self,plot=True):
 
         A=np.zeros((self.resolution+1,self.resolution+1))
 
@@ -215,7 +215,7 @@ class BEM:
 
         fig=plt.figure()
         fig2=plt.figure()
-        ax=fig.subplots(1,1)
+        ax=fig.subplots(1,2)
         self.ax2=fig2.add_subplot(projection='3d')
         # self.ax2=fig2.add_subplot(projection='3d')
 
@@ -236,13 +236,13 @@ class BEM:
                 r_p=r_stations_abs_circ[j]
                 # print(self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0])
                 A[j,i]=self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0]
-
-            for ij in range(len(self.tlst)-1):
-            
-                self.ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
-                self.ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr2[ij],self.yarr2[ij+1]],[self.zarr2[ij],self.zarr2[ij+1]],color='tab:blue')
-                # self.ax3.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]])
-            self.ax2.plot([0,0],[0,0],[r_vortex-self.dr_used/2,r_vortex+self.dr_used/2],color='tab:blue')
+            if plot==True:
+                for ij in range(len(self.tlst)-1):
+                
+                    self.ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
+                    self.ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr2[ij],self.yarr2[ij+1]],[self.zarr2[ij],self.zarr2[ij+1]],color='tab:blue')
+                    ax[0].plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]])
+                self.ax2.plot([0,0],[0,0],[r_vortex-self.dr_used/2,r_vortex+self.dr_used/2],color='tab:blue')
                 
 
             print(r_vortex+self.dr_used/2)
@@ -252,8 +252,8 @@ class BEM:
 
 
 
-        pcm=ax.imshow(A)
-        fig.colorbar(pcm,ax=ax)
+        pcm=ax[1].imshow(A)
+        fig.colorbar(pcm,ax=ax[1])
         plt.show()
 
 
@@ -531,7 +531,7 @@ if __name__ == "__main__":
     
     bem = BEM(J=2)
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    bem.Lifting_line(resolution=5)
+    bem.Lifting_line(resolution=10)
     # bem.blade_element(resolution=100, use_prandtl=False)
     
     # plot(
