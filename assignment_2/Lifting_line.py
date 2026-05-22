@@ -130,7 +130,7 @@ class BEM:
         return C_ind,U_ind
     
     
-    def calc_ind_filiment(self,Xp,r,dt=0.1,tend=5,plot=True):
+    def calc_ind_filiment(self,Xp,r,dt=0.1,tend=5,plot=False):
 
         # self.yarr=r*np.sin(omega*self.tlst)
         # self.zarr=r*np.cos(omega*self.tlst)
@@ -171,23 +171,24 @@ class BEM:
             fig=plt.figure()
             fig2=plt.figure()
             ax=fig.subplots(2,2)
-            ax2=fig2.add_subplot(projection='3d')
+            self.ax2=fig2.add_subplot(projection='3d')
+            # self.ax2.plot([0,0],[0,0],[r-self.dr_used/2,r+self.dr_used/2],color='tab:blue')
+
             for ij in range(len(self.tlst)-1):
                 
                 # uind.append(self.biot_savart([self.xarr[ij],self.yarr[ij],self.zarr[ij]],[self.xarr[ij+1],self.yarr[ij+1],self.zarr[ij+1]],Xp,1)[0])
                 ax[0,0].plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]])
                 ax[0,1].plot([self.xarr[ij],self.xarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]])
                 ax[1,0].plot([self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]])
-                ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
-                ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr2[ij],self.yarr2[ij+1]],[self.zarr2[ij],self.zarr2[ij+1]],color='tab:blue')
+                # ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
+                # ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr2[ij],self.yarr2[ij+1]],[self.zarr2[ij],self.zarr2[ij+1]],color='tab:blue')
                 
                 # ax2.plot([xarr2[i],xarr2[ij+1]],[yarr2[i],yarr2[ij+1]],[zarr2[i],zarr2[i+1]],color='tab:blue')
             ax[1,1].plot(uind)
             ax[1,1].grid()
             # surf=ax.plot_surface(mesh.X_nodes,mesh.Y_nodes,IC,cmap=cm.coolwarm)
-            ax2.scatter(Xp[0],Xp[1],Xp[2])
+            # ax2.scatter(Xp[0],Xp[1],Xp[2])
             print(np.sum(uind))
-            plt.show()
 
         # print(np.sum(uind))
         return [sum(cuind),sum(cvind),sum(cwind)],[sum(uind),sum(vind),sum(wind)]
@@ -195,7 +196,7 @@ class BEM:
 
     def Make_ind_matrix(self):
 
-        A=np.zeros((self.resolution,self.resolution))
+        A=np.zeros((self.resolution+1,self.resolution+1))
 
         tend=5
         dt=0.1
@@ -210,10 +211,18 @@ class BEM:
         
 
         r_stations_abs_circ=self.r_stations_abs[:-1]+self.dr/2
+        print(r_stations_abs_circ)
+
+        fig=plt.figure()
+        fig2=plt.figure()
+        ax=fig.subplots(1,1)
+        self.ax2=fig2.add_subplot(projection='3d')
+        # self.ax2=fig2.add_subplot(projection='3d')
+
         # for iter in range(max_iterations):
-        for i in range(self.resolution):
+        for i in range(self.resolution+1):
             print(i)
-            i=4
+            # i=4
             r_vortex=r_stations_abs_circ[i]
             self.dr_used=self.dr[i]
 
@@ -221,24 +230,35 @@ class BEM:
             self.zarr=(r_vortex+1/2*self.dr_used)*np.cos(self.omega*self.tlst)
             self.yarr2=(r_vortex-1/2*self.dr_used)*np.sin(self.omega*self.tlst)
             self.zarr2=(r_vortex-1/2*self.dr_used)*np.cos(self.omega*self.tlst)
-            for j in range(self.resolution):
-                j=5
+            for j in range(self.resolution+1):
+                # j=5
 
                 r_p=r_stations_abs_circ[j]
                 # print(self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0])
                 A[j,i]=self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0]
 
+            for ij in range(len(self.tlst)-1):
+            
+                self.ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
+                self.ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr2[ij],self.yarr2[ij+1]],[self.zarr2[ij],self.zarr2[ij+1]],color='tab:blue')
+                # self.ax3.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]])
+            self.ax2.plot([0,0],[0,0],[r_vortex-self.dr_used/2,r_vortex+self.dr_used/2],color='tab:blue')
+                
+
+            print(r_vortex+self.dr_used/2)
+        
+        
         # u_ind=A@self.circulation_list
 
 
 
-        pcm=plt.imshow(A)
-        plt.colorbar(pcm)
+        pcm=ax.imshow(A)
+        fig.colorbar(pcm,ax=ax)
         plt.show()
 
 
 
-    def Lifting_line(self, resolution=5, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
+    def Lifting_line(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
         cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
         cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
         self.resolution=resolution
@@ -253,12 +273,13 @@ class BEM:
         else:  # linear
             r_stations_norm = np.linspace(self.blade_start_fraction, 1, resolution + 1)
 
-        
+        print(r_stations_norm)
         # Regenerate normalized blade properties at new radial stations
         twist_stations = []
         chord_norm_stations = []
-        r_stations_norm = np.insert(r_stations_norm, 0, 2*r_stations_norm[0]-r_stations_norm[1])
+        # r_stations_norm = np.insert(r_stations_norm, 0, 2*r_stations_norm[0]-r_stations_norm[1])
         r_stations_norm = np.insert(r_stations_norm, 0, 0)
+        print(r_stations_norm)
 
         for r_norm in r_stations_norm:
             if r_norm > self.blade_start_fraction:
@@ -270,6 +291,7 @@ class BEM:
 
         # Calculate self.dr in absolute units
         self.r_stations_abs = r_stations_norm * self.radius
+        print(self.r_stations_abs)
         self.dr =  np.diff(self.r_stations_abs)
 
         A_disk = np.pi * self.radius**2
@@ -509,7 +531,7 @@ if __name__ == "__main__":
     
     bem = BEM(J=2)
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    bem.Lifting_line(resolution=100)
+    bem.Lifting_line(resolution=5)
     # bem.blade_element(resolution=100, use_prandtl=False)
     
     # plot(
