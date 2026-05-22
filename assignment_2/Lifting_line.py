@@ -108,7 +108,7 @@ class BEM:
         return F_total
     
     def biot_savart(self,X1,X2,Xp,gamma): #TODO: Add CORE like in answer_from_the_github_page.js
-        eps=1e-10
+        eps=1e-6
         R1=np.sqrt((Xp[0]-X1[0])**2+(Xp[1]-X1[1])**2+(Xp[2]-X1[2])**2)
         R1=max(R1,eps)
         R2=np.sqrt((Xp[0]-X2[0])**2+(Xp[1]-X2[1])**2+(Xp[2]-X2[2])**2)
@@ -231,7 +231,7 @@ class BEM:
             self.yarr2=(r_vortex-1/2*self.dr_used)*np.sin(self.omega*self.tlst)
             self.zarr2=(r_vortex-1/2*self.dr_used)*np.cos(self.omega*self.tlst)
             for j in range(self.resolution+1):
-                # j=5
+                # j=4
 
                 r_p=r_stations_abs_circ[j]
                 # print(self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0])
