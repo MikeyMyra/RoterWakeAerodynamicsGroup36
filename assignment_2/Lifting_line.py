@@ -194,67 +194,41 @@ class BEM:
         return [sum(cuind),sum(cvind),sum(cwind)],[sum(uind),sum(vind),sum(wind)]
 
 
-    def Make_ind_matrix(self,plot=True):
+    def Make_ind_matrix(self, controlpoints, rings, plot=True):
 
-        A=np.zeros((self.resolution+1,self.resolution+1))
+        n_cp = len(controlpoints)
+        Au = np.zeros((n_cp, n_cp))
+        Av = np.zeros((n_cp, n_cp))
+        Aw = np.zeros((n_cp, n_cp))
 
-        tend=5
-        dt=0.1
-        self.tlst=np.arange(0,tend,dt)
-        # Uwake=10
-        self.omega=1
+        for target_idx, Xp in enumerate(controlpoints):
+            for source_idx, filaments in enumerate(rings):
+                u_total = 0.0
+                v_total = 0.0
+                w_total = 0.0
 
+                for X1, X2 in filaments:
+                    _, uvwind = self.biot_savart(X1, X2, Xp, 1.0)
+                    u_total += uvwind[0]
+                    v_total += uvwind[1]
+                    w_total += uvwind[2]
 
-        self.xarr=self.tlst*self.V_axial
+                Au[target_idx, source_idx] = u_total
+                Av[target_idx, source_idx] = v_total
+                Aw[target_idx, source_idx] = w_total
 
-        
-        
+        if plot == True:
+            fig = plt.figure()
+            ax = fig.subplots(1, 3)
+            ax[0].imshow(Au)
+            ax[0].set_title('U')
+            ax[1].imshow(Av)
+            ax[1].set_title('V')
+            ax[2].imshow(Aw)
+            ax[2].set_title('W')
+            plt.show()
 
-        r_stations_abs_circ=self.r_stations_abs[:-1]+self.dr/2
-        print(r_stations_abs_circ)
-
-        fig=plt.figure()
-        fig2=plt.figure()
-        ax=fig.subplots(1,2)
-        self.ax2=fig2.add_subplot(projection='3d')
-        # self.ax2=fig2.add_subplot(projection='3d')
-
-        # for iter in range(max_iterations):
-        for i in range(self.resolution+1):
-            print(i)
-            # i=4
-            r_vortex=r_stations_abs_circ[i]
-            self.dr_used=self.dr[i]
-
-            self.yarr=(r_vortex+1/2*self.dr_used)*np.sin(self.omega*self.tlst)
-            self.zarr=(r_vortex+1/2*self.dr_used)*np.cos(self.omega*self.tlst)
-            self.yarr2=(r_vortex-1/2*self.dr_used)*np.sin(self.omega*self.tlst)
-            self.zarr2=(r_vortex-1/2*self.dr_used)*np.cos(self.omega*self.tlst)
-            for j in range(self.resolution+1):
-                # j=4
-
-                r_p=r_stations_abs_circ[j]
-                # print(self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0])
-                A[j,i]=self.calc_ind_filiment([0,0,r_p],r_vortex)[0][0]
-            if plot==True:
-                for ij in range(len(self.tlst)-1):
-                
-                    self.ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]],[self.zarr[ij],self.zarr[ij+1]],color='tab:blue')
-                    self.ax2.plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr2[ij],self.yarr2[ij+1]],[self.zarr2[ij],self.zarr2[ij+1]],color='tab:blue')
-                    ax[0].plot([self.xarr[ij],self.xarr[ij+1]],[self.yarr[ij],self.yarr[ij+1]])
-                self.ax2.plot([0,0],[0,0],[r_vortex-self.dr_used/2,r_vortex+self.dr_used/2],color='tab:blue')
-                
-
-            print(r_vortex+self.dr_used/2)
-        
-        
-        # u_ind=A@self.circulation_list
-
-
-
-        pcm=ax[1].imshow(A)
-        fig.colorbar(pcm,ax=ax[1])
-        plt.show()
+        return Au, Av, Aw
 
 
 
@@ -262,8 +236,8 @@ class BEM:
         cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
         cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
         self.resolution=resolution
-        
         self.omega = (2 * np.pi * self.rpm) / 60
+        A_disk = np.pi * self.radius**2
 
         # Generate normalized radial stations (0 to 1)
         if spacing == 'cosine': # cosine
@@ -273,15 +247,16 @@ class BEM:
         else:  # linear
             r_stations_norm = np.linspace(self.blade_start_fraction, 1, resolution + 1)
 
-        print(r_stations_norm)
-        # Regenerate normalized blade properties at new radial stations
+        # this zero makes the first real panel start at the spinner-ish part
+        r_stations_norm = np.insert(r_stations_norm, 0, 0)
+        self.r_stations_abs = r_stations_norm * self.radius
+        self.dr =  np.diff(self.r_stations_abs)
+        r_control_abs = self.r_stations_abs[:-1] + self.dr/2
+        r_control_norm = r_control_abs/self.radius
+
         twist_stations = []
         chord_norm_stations = []
-        # r_stations_norm = np.insert(r_stations_norm, 0, 2*r_stations_norm[0]-r_stations_norm[1])
-        r_stations_norm = np.insert(r_stations_norm, 0, 0)
-        print(r_stations_norm)
-
-        for r_norm in r_stations_norm:
+        for r_norm in r_control_norm:
             if r_norm > self.blade_start_fraction:
                 twist_stations.append(-50 * r_norm + 35 + self.collective_blade_pitch + self.collective_blade_pitch_location * 50 - 35 )
                 chord_norm_stations.append(0.18 - 0.06 * r_norm)
@@ -289,25 +264,161 @@ class BEM:
                 twist_stations.append(0)
                 chord_norm_stations.append(0)
 
-        # Calculate self.dr in absolute units
-        self.r_stations_abs = r_stations_norm * self.radius
-        print(self.r_stations_abs)
-        self.dr =  np.diff(self.r_stations_abs)
+        def rot_yz(vec,angle):
+            c=np.cos(angle)
+            s=np.sin(angle)
+            return np.array([vec[0],vec[1]*c-vec[2]*s,vec[1]*s+vec[2]*c],dtype=float)
 
-        A_disk = np.pi * self.radius**2
+        def make_the_rotor():
+            filament_rings=[]
+            controlpoints=[]
+            panels=[]
+            theta_array=self.omega * self.tlst
+            wake_pitch=self.U_inf/(self.omega+1e-16) 
 
+            for blade in range(self.n_blades):
+                angle_rotation=2*np.pi/self.n_blades*blade
+                for i in range(len(r_control_abs)):
+                    r_in=self.r_stations_abs[i]
+                    r_out=self.r_stations_abs[i+1]
+                    r_mid=r_control_abs[i]
+                    cp=rot_yz([0,0,r_mid],angle_rotation)
+                    controlpoints.append(cp)
+                    panels.append(i)
 
-        self.circulation_list=np.ones_like(r_stations_norm)
-        print(self.circulation_list)
-        iteration=0
-        a=0.05
-        self.V_axial = 10#self.U_inf * (1 - a)
+                    filaments=[]
+                    filaments.append((rot_yz([0,0,r_in],angle_rotation),rot_yz([0,0,r_out],angle_rotation)))
 
-        self.Make_ind_matrix()
+                    old=rot_yz([0,0,r_out],angle_rotation)
+                    for j in range(len(theta_array)-1):
+                        th=theta_array[j+1]
+                        t_cur = self.tlst[j+1]
+                        new=rot_yz([t_cur*self.U_inf, r_out*np.sin(-th), r_out*np.cos(-th)],angle_rotation)
+                        filaments.append((old,new))
+                        old=new
+
+                    helix=[]
+                    for j in range(len(theta_array)):
+                        th=theta_array[j]
+                        helix.append(rot_yz([wake_pitch*th, r_in*np.sin(-th), r_in*np.cos(-th)],angle_rotation))
+                    for j in range(len(helix)-1,0,-1):
+                        filaments.append((helix[j],helix[j-1]))
+
+                    filament_rings.append(filaments)
+
+            return controlpoints,filament_rings,panels
+
+        print(f"making {self.n_blades} blade lifting line geometry")
+        controlpoints,rings,panels=make_the_rotor()
+        n_cp=len(controlpoints)
+
+        # Debug plot: show control points and filament rings (3D)
+        try:
+            fig3 = plt.figure()
+            ax3 = fig3.add_subplot(projection='3d')
+            cps = np.array(controlpoints)
+            if cps.size:
+                ax3.scatter(cps[:, 0], cps[:, 1], cps[:, 2], c='r', marker='o', label='control points')
+
+            # Draw filament segments
+            for ring in rings:
+                for P1, P2 in ring:
+                    xs = [P1[0], P2[0]]
+                    ys = [P1[1], P2[1]]
+                    zs = [P1[2], P2[2]]
+                    ax3.scatter(xs, ys, zs, c='b', marker='.', s=10)  # smaller blue dots for filaments
+
+            ax3.set_title('Control points and filament rings')
+            ax3.set_xlabel('X')
+            ax3.set_ylabel('Y')
+            ax3.set_zlabel('Z')
+            ax3.legend()
+            ax3.set_aspect('equalyz')
+            plt.show()
+        except Exception:
+            pass
+
         
-        
+
+        print("making induced velocity matrix, this is the slow bit")
+        MatrixU, MatrixV, MatrixW = self.Make_ind_matrix(controlpoints, rings, plot=False)
+
+        GammaNew=np.zeros(n_cp)
+        Gamma=np.zeros(n_cp)
+        error=10
+        ConvWeight=0.1
+        converged_iter=max_iterations
+
+        self.convergence_history = {'error': [], 'iteration': []} if track_convergence else None
+
+        for kiter in range(max_iterations):
+            Gamma=GammaNew.copy()
+
+            u_ind=MatrixU @ Gamma
+            v_ind=MatrixV @ Gamma
+            w_ind=MatrixW @ Gamma
+
+            a_temp = np.zeros(n_cp)
+            alpha_temp = np.zeros(n_cp)
+            aline_temp = np.zeros(n_cp)
+            Fnorm_temp = np.zeros(n_cp)
+            Ftan_temp = np.zeros(n_cp)
+
+            for icp in range(n_cp):
+                panel_i=panels[icp]
+                r_norm=r_control_norm[panel_i]
+                r_abs=r_control_abs[panel_i]
+
+                if r_norm <= self.blade_start_fraction:
+                    GammaNew[icp]=0
+                    continue
+
+                Xp=controlpoints[icp]
+                radialposition=max(np.linalg.norm(Xp),1e-12)
+                vrot=np.cross([-self.omega,0,0],Xp)
+                vel1=np.array([self.U_inf+u_ind[icp]+vrot[0],v_ind[icp]+vrot[1],w_ind[icp]+vrot[2]],dtype=float)
+                azimdir=np.cross(np.array([-1/radialposition,0,0]),Xp)
+                vazim=np.dot(azimdir,vel1)
+                vaxial=vel1[0]
+
+                chord_abs=chord_norm_stations[panel_i]*self.radius
+                theta_deg=twist_stations[panel_i]
+                theta_rad=np.deg2rad(theta_deg)
+
+                V_effective=np.sqrt(vaxial**2+vazim**2)
+                phi=np.arctan2(vaxial,vazim)
+                alpha=np.rad2deg(theta_rad-phi)
+                alpha=np.clip(alpha, self.AoA[0], self.AoA[-1])
+                cl=float(cl_interp(alpha))
+
+                
+                GammaNew[icp]=0.5*V_effective*chord_abs*cl
+
+                a_temp[icp] = (-u_ind[icp] + vrot[0]) / (self.U_inf + 1e-12)
+                alpha_temp[icp] = np.rad2deg(theta_rad - phi)
+                aline_temp[icp] = (vazim/(radialposition*self.omega) - 1)
+                Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.sin(phi)
+                Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.cos(phi)
 
 
+            refererror=max(np.max(np.abs(GammaNew)),0.001)
+            error=np.max(np.abs(GammaNew-Gamma))/refererror
+            if track_convergence:
+                self.convergence_history['error'].append(error)
+                self.convergence_history['iteration'].append(kiter)
+            if kiter%25==0:
+                print("ll iter",kiter,"error",error)
+            if error<tolerance:
+                converged_iter=kiter+1
+                print("Lifting line converged after",converged_iter,"iterations")
+                break
+
+            GammaNew=(1-ConvWeight)*Gamma + ConvWeight*GammaNew
+
+        if error>=tolerance:
+            print("Warning: Lifting line did not converge but it did stop")
+
+        return a_temp, aline_temp, Fnorm_temp, Ftan_temp, GammaNew, converged_iter, self.convergence_history, r_control_abs, alpha_temp
 
         
 
@@ -428,6 +539,7 @@ class BEM:
                 # Flow angles
                 phi = np.arctan2(V_axial, V_tangential)
                 alpha = np.rad2deg(theta_rad - phi)
+                alpha = np.clip(alpha, self.AoA[0], self.AoA[-1])
                 
                 # Airfoil coefficients
                 cl = float(cl_interp(alpha))
@@ -530,8 +642,93 @@ class BEM:
 if __name__ == "__main__":
     
     bem = BEM(J=2)
+
+    tend=5
+    dt=0.1
+    bem.tlst=np.arange(0,tend,dt)
+    # Uwake=10
+    bem.rpm=40
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    bem.Lifting_line(resolution=10)
+    output = bem.Lifting_line(resolution=10)
+
+    # Unpack outputs
+    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
+
+    blade_count = bem.n_blades
+    station_count = len(r_control)
+
+    def plot_blade_overlay(ax, x_values, y_values, label_prefix, style='-o'):
+        x_values = np.asarray(x_values)
+        y_values = np.asarray(y_values)
+
+        if station_count > 0 and len(y_values) == blade_count * station_count:
+            blade_series = [y_values[i * station_count:(i + 1) * station_count] for i in range(blade_count)]
+            if all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
+                ax.plot(x_values, blade_series[0], style, label='all blades (identical)')
+                ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
+                        va='top', ha='left', fontsize=9)
+            else:
+                for blade_idx, series in enumerate(blade_series, start=1):
+                    ax.plot(x_values, series, style, label=f'{label_prefix} blade {blade_idx}')
+        else:
+            ax.plot(x_values, y_values, style, label=label_prefix)
+
+    def finish_axis(ax, title, ylabel):
+        ax.set_title(title)
+        ax.set_xlabel('r (m)')
+        ax.set_ylabel(ylabel)
+        ax.legend()
+        ax.grid(True)
+
+    # Plot results
+    fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+
+    # Circulation
+    try:
+        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma')
+        finish_axis(axs[0, 0], 'Circulation vs radius', 'Gamma (m^2/s)')
+    except Exception:
+        pass
+
+    # Axial and azimuthal induction
+    try:
+        plot_blade_overlay(axs[0, 1], r_control, a_out, 'a')
+        plot_blade_overlay(axs[0, 1], r_control, aline_out, "a'", style='-s')
+        finish_axis(axs[0, 1], 'Induction factors', 'Induction factor')
+    except Exception:
+        pass
+
+    # Forces
+    try:
+        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, 'Fnorm')
+        plot_blade_overlay(axs[1, 0], r_control, Ftan_out, 'Ftan', style='-s')
+        finish_axis(axs[1, 0], 'Section forces', 'Force per unit span')
+    except Exception:
+        pass
+
+    # Angle of attack
+    try:
+        plot_blade_overlay(axs[0, 2], r_control, alpha_out, 'AoA', style='-^')
+        finish_axis(axs[0, 2], 'Angle of attack', 'AoA (degrees)')
+    except Exception:
+        pass
+
+    # Convergence history
+    try:
+        if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
+            axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'])
+            axs[1, 1].set_title('Convergence history')
+            axs[1, 1].set_xlabel('Iteration')
+            axs[1, 1].set_ylabel('Relative error')
+            axs[1, 1].grid(True)
+        else:
+            axs[1, 1].axis('off')
+    except Exception:
+        axs[1, 1].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
     # bem.blade_element(resolution=100, use_prandtl=False)
     
     # plot(
