@@ -471,16 +471,16 @@ class BEM:
         self.V_tangential_list = []
         self.V_effective_list = []
         self.lift_list = []
-        self.self.drag_list = []
+        self.drag_list = []
         self.F_axial_list = []
         self.F_azimuth_list = []
         self.circulation_list = []
         self.F_prandtl_list = []
-        self.dCT_self.dr_list = []
+        self.dCT_dr_list = []
         self.CT_conv_list = []
         self.CT_conv_ind=[]
-        self.dCQ_self.dr_list = []
-        self.dCP_self.dr_list = []
+        self.dCQ_dr_list = []
+        self.dCP_dr_list = []
         self.iterations_list = []
         
         # Convergence tracking
@@ -510,14 +510,14 @@ class BEM:
                 self.V_tangential_list.append(0)
                 self.V_effective_list.append(0)
                 self.lift_list.append(0)
-                self.self.drag_list.append(0)
+                self.drag_list.append(0)
                 self.F_axial_list.append(0)
                 self.F_azimuth_list.append(0)
                 self.circulation_list.append(0)
                 self.F_prandtl_list.append(0)
-                self.dCT_self.dr_list.append(0)
-                self.dCQ_self.dr_list.append(0)
-                self.dCP_self.dr_list.append(0)
+                self.dCT_dr_list.append(0)
+                self.dCQ_dr_list.append(0)
+                self.dCP_dr_list.append(0)
                 self.iterations_list.append(0)
                 continue
             
@@ -610,14 +610,14 @@ class BEM:
             self.V_tangential_list.append(V_tangential)
             self.V_effective_list.append(V_effective)
             self.lift_list.append(lift)
-            self.self.drag_list.append(self.drag)
+            self.drag_list.append(self.drag)
             self.F_axial_list.append(F_axial)
             self.F_azimuth_list.append(F_azimuth)
             self.circulation_list.append(circulation)
             self.F_prandtl_list.append(F_prandtl)
-            self.dCT_self.dr_list.append(dCT)
-            self.dCQ_self.dr_list.append(dCQ)
-            self.dCP_self.dr_list.append(dCP)
+            self.dCT_dr_list.append(dCT)
+            self.dCQ_dr_list.append(dCQ)
+            self.dCP_dr_list.append(dCP)
             self.iterations_list.append(iter_count)
             
             # Track convergence if requested
@@ -649,13 +649,15 @@ if __name__ == "__main__":
     # Uwake=10
     bem.rpm=40
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=10)
+    output = bem.Lifting_line(resolution=100, track_convergence=True)
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
 
     blade_count = bem.n_blades
     station_count = len(r_control)
+
+
 
     def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
         x_values = np.asarray(x_values)
@@ -691,12 +693,24 @@ if __name__ == "__main__":
         ax.grid(True)
 
     # Plot results
+    # run BEM blade-element solver for comparison
+    bem.blade_element(resolution=100, use_prandtl=False)
+    bem_r_abs = np.array(bem.r_R_list) * bem.radius
+
+
     fig, axs = plt.subplots(2, 3, figsize=(15, 8))
 
     # Circulation
     try:
         plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma')
         finish_axis(axs[0, 0], 'Circulation vs radius', 'Gamma (m^2/s)')
+        # overlay BEM circulation
+        try:
+            if bem_r_abs is not None and len(bem.circulation_list) > 0:
+                axs[0, 0].plot(bem_r_abs, bem.circulation_list, '--k', label='BEM')
+                axs[0, 0].legend()
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -705,6 +719,15 @@ if __name__ == "__main__":
         plot_blade_overlay(axs[0, 1], r_control, a_out, 'a')
         plot_blade_overlay(axs[0, 1], r_control, aline_out, "a'", style='-s')
         finish_axis(axs[0, 1], 'Induction factors', 'Induction factor')
+        # overlay BEM induction
+        try:
+            if bem_r_abs is not None and len(bem.a_list) > 0:
+                axs[0, 1].plot(bem_r_abs, bem.a_list, '--k', label='BEM a')
+            if bem_r_abs is not None and len(bem.a_prime_list) > 0:
+                axs[0, 1].plot(bem_r_abs, bem.a_prime_list, ':k', label="BEM a'")
+            axs[0, 1].legend()
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -713,12 +736,28 @@ if __name__ == "__main__":
         plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, 'Fnorm')
         plot_blade_overlay(axs[1, 0], r_control, Ftan_out, 'Ftan', style='-s')
         finish_axis(axs[1, 0], 'Section forces', 'Force per unit span')
+        # overlay BEM forces
+        try:
+            if bem_r_abs is not None and len(bem.F_axial_list) > 0:
+                axs[1, 0].plot(bem_r_abs, bem.F_axial_list, '--k', label='BEM F_axial')
+            if bem_r_abs is not None and len(bem.F_azimuth_list) > 0:
+                axs[1, 0].plot(bem_r_abs, bem.F_azimuth_list, ':k', label='BEM F_azimuth')
+            axs[1, 0].legend()
+        except Exception:
+            pass
     except Exception:
         pass
 
     # Angle of attack
     try:
         plot_blade_overlay(axs[0, 2], r_control, alpha_out, 'AoA', style='-^')
+        # overlay BEM AoA
+        try:
+            if bem_r_abs is not None and len(bem.alpha_list) > 0:
+                axs[0, 2].plot(bem_r_abs, bem.alpha_list, '--k', label='BEM AoA')
+                axs[0, 2].legend()
+        except Exception:
+            pass
         finish_axis(axs[0, 2], 'Angle of attack', 'AoA (degrees)')
     except Exception:
         pass
