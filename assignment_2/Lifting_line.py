@@ -232,7 +232,7 @@ class BEM:
 
 
 
-    def Lifting_line(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
+    def Lifting_line(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False, plot_geometry=False):
         cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
         cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
         self.resolution=resolution
@@ -247,7 +247,6 @@ class BEM:
         else:  # linear
             r_stations_norm = np.linspace(self.blade_start_fraction, 1, resolution + 1)
 
-        # this zero makes the first real panel start at the spinner-ish part
         r_stations_norm = np.insert(r_stations_norm, 0, 0)
         self.r_stations_abs = r_stations_norm * self.radius
         self.dr =  np.diff(self.r_stations_abs)
@@ -313,30 +312,31 @@ class BEM:
         n_cp=len(controlpoints)
 
         # Debug plot: show control points and filament rings (3D)
-        try:
-            fig3 = plt.figure()
-            ax3 = fig3.add_subplot(projection='3d')
-            cps = np.array(controlpoints)
-            if cps.size:
-                ax3.scatter(cps[:, 0], cps[:, 1], cps[:, 2], c='r', marker='o', label='control points')
+        if plot_geometry:
+            try:
+                fig3 = plt.figure()
+                ax3 = fig3.add_subplot(projection='3d')
+                cps = np.array(controlpoints)
+                if cps.size:
+                    ax3.scatter(cps[:, 0], cps[:, 1], cps[:, 2], c='r', marker='o', label='control points')
 
-            # Draw filament segments
-            for ring in rings:
-                for P1, P2 in ring:
-                    xs = [P1[0], P2[0]]
-                    ys = [P1[1], P2[1]]
-                    zs = [P1[2], P2[2]]
-                    ax3.scatter(xs, ys, zs, c='b', marker='.', s=10)  # smaller blue dots for filaments
+                # Draw filament segments
+                for ring in rings:
+                    for P1, P2 in ring:
+                        xs = [P1[0], P2[0]]
+                        ys = [P1[1], P2[1]]
+                        zs = [P1[2], P2[2]]
+                        ax3.scatter(xs, ys, zs, c='b', marker='.', s=10)  # smaller blue dots for filaments
 
-            ax3.set_title('Control points and filament rings')
-            ax3.set_xlabel('X')
-            ax3.set_ylabel('Y')
-            ax3.set_zlabel('Z')
-            ax3.legend()
-            ax3.set_aspect('equalyz')
-            plt.show()
-        except Exception:
-            pass
+                ax3.set_title('Control points and filament rings')
+                ax3.set_xlabel('X')
+                ax3.set_ylabel('Y')
+                ax3.set_zlabel('Z')
+                ax3.legend()
+                ax3.set_aspect('equalyz')
+                plt.show()
+            except Exception:
+                pass
 
         
 
@@ -657,26 +657,36 @@ if __name__ == "__main__":
     blade_count = bem.n_blades
     station_count = len(r_control)
 
-    def plot_blade_overlay(ax, x_values, y_values, label_prefix, style='-o'):
+    def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
         x_values = np.asarray(x_values)
         y_values = np.asarray(y_values)
 
+        # remove r_index == 0 control points
+        x_masked = x_values[1:]
+
         if station_count > 0 and len(y_values) == blade_count * station_count:
-            blade_series = [y_values[i * station_count:(i + 1) * station_count] for i in range(blade_count)]
-            if all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
-                ax.plot(x_values, blade_series[0], style, label='all blades (identical)')
+            blade_series = [np.asarray(y_values[i * station_count:(i + 1) * station_count])[1:] for i in range(blade_count)]
+            # if all blades identical, plot a single line
+            if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
+                ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
                 ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
                         va='top', ha='left', fontsize=9)
             else:
                 for blade_idx, series in enumerate(blade_series, start=1):
-                    ax.plot(x_values, series, style, label=f'{label_prefix} blade {blade_idx}')
+                    ax.plot(x_masked, series, style, label=f'{label_prefix} blade {blade_idx}')
         else:
-            ax.plot(x_values, y_values, style, label=label_prefix)
+            ax.plot(x_masked, y_values[1:], style, label=label_prefix)
 
     def finish_axis(ax, title, ylabel):
         ax.set_title(title)
         ax.set_xlabel('r (m)')
         ax.set_ylabel(ylabel)
+        # add vertical line showing blade start location
+        try:
+            blade_root_r = bem.blade_start_fraction * bem.radius
+            ax.axvline(blade_root_r, color='k', linestyle='--', linewidth=1, label='blade start')
+        except Exception:
+            pass
         ax.legend()
         ax.grid(True)
 
