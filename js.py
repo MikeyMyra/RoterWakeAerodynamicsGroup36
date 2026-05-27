@@ -478,9 +478,9 @@ def make_plots(results, wake, TSR):
 # ── main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    TSR         = 8.0
-    N_ELEMENTS  = 10
-    N_ROTATIONS = 0.12
+    TSR         = 0.01555555
+    N_ELEMENTS  = 20
+    N_ROTATIONS = 0.1
 
     results, wake = solve_rotor_lifting_line(TSR, N_ELEMENTS, N_ROTATIONS)
     make_plots(results, wake, TSR)
