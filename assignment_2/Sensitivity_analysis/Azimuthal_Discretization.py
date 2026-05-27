@@ -6,8 +6,8 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Lifting_line import BEM
 
-a_ind_wake_lst=np.array([0,0])  #np.linspace(0,1,10)
-res=20
+res_lst=np.array([5,10,20])  #np.linspace(0,1,10)
+# res=20
 bem=BEM(2)
 i=0
 bem = BEM(J=2)
@@ -17,15 +17,11 @@ bem.tlst=np.arange(0,tend,dt)
 # Uwake=10
 bem.rpm=40
 
-for a_ind_wake in a_ind_wake_lst:
+for res in res_lst:
     # bem.Lifting_line(20,a_ind_wake)
     
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    if i==0:
-        output = bem.Lifting_line(resolution=10,a_ind_wake=a_ind_wake, track_convergence=True)
-    else:
-        output = bem.Lifting_line(resolution=10,a_ind_wake=a_ind_wake, track_convergence=True,spacing='cosine')
-
+    output = bem.Lifting_line(resolution=res, track_convergence=True)
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
@@ -73,27 +69,27 @@ for a_ind_wake in a_ind_wake_lst:
 
         # Circulation
         try:
-            plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma (linear)')
+            plot_blade_overlay(axs[0, 0], r_control, Gamma_out, f'Gamma (resolution={res})')
         except Exception:
             pass
 
         # Axial and azimuthal induction
         try:
-            plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,$' f'(linear)')
-            plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime$' f'(linear)', style='-s')
+            plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,$' f'(resolution={res})')
+            plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,$' f'(resolution={res})', style='-s')
         except Exception:
             pass
 
         # Forces
         try:
-            plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}$' f'(linear)')
-            plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}$' f'(linear)', style='-s')
+            plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}\,$' f'(resolution={res})')
+            plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,$' f'(resolution={res})', style='-s')
         except Exception:
             pass
 
         # Angle of attack
         try:
-            plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,$' f'(linear)', style='-^')
+            plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,$' f'(resolution={res})', style='-^')
 
             # overlay BEM AoA
         except Exception:
@@ -102,7 +98,7 @@ for a_ind_wake in a_ind_wake_lst:
         # Convergence history
         try:
             if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
-                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],label=r'$\epsilon\,$' f'(linear)')
+                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],label=r'$\epsilon\,$' f'(resolution={res})')
                 # axs[1, 1].set_title('Convergence history')
                 # axs[1, 1].set_xlabel('Iteration')
                 # axs[1, 1].set_ylabel('Relative error')
@@ -113,21 +109,21 @@ for a_ind_wake in a_ind_wake_lst:
             axs[1, 1].axis('off')
 
     else:
-        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma (cosine)' )
+        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma' r'$\,$'f'(resolution={res})')
 
 
-        plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,$' f'(cosine)')
-        plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,$' f'(cosine)', style='-s')
+        plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,$' f'(resolution={res})')
+        plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,$' f'(resolution={res})', style='-s')
 
 
-        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out,  r'$ F_{norm}\,$' f'(cosine)')
-        plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,$' f'(cosine)', style='-s')
+        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out,  r'$ F_{norm}\,$' f'(resolution={res})')
+        plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,$' f'(resolution={res})', style='-s')
 
-        plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,$' f'(cosine)', style='-^')
+        plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,$' f'(resolution={res})', style='-^')
 
         try:
             if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
-                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],label=r'$\epsilon\,$' f'(cosine)')
+                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],label=r'$\epsilon\,$' f'(resolution={res})')
                 # axs[1, 1].set_title('Convergence history')
                 # axs[1, 1].set_xlabel('Iteration')
                 # axs[1, 1].set_ylabel('Relative error')

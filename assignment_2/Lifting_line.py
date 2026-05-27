@@ -31,7 +31,7 @@ class BEM:
     def _get_airfoil():
         
         data = []
-        with open("assignment_2\ARAD8pct_polar.txt", "r") as file:
+        with open("assignment_2\\ARAD8pct_polar.txt", "r") as file:
             for line in file:
                 row = line.strip().split()
                 data.append(row)
@@ -232,7 +232,7 @@ class BEM:
 
 
 
-    def Lifting_line(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False, plot_geometry=False):
+    def Lifting_line(self, resolution=100,a_ind_wake=0,tend=5, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False, plot_geometry=False):
         cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
         cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
         self.resolution=resolution
@@ -292,7 +292,7 @@ class BEM:
                     for j in range(len(theta_array)-1):
                         th=theta_array[j+1]
                         t_cur = self.tlst[j+1]
-                        new=rot_yz([t_cur*self.U_inf, r_out*np.sin(-th), r_out*np.cos(-th)],angle_rotation)
+                        new=rot_yz([t_cur*self.U_inf*(1+a_ind_wake), r_out*np.sin(-th), r_out*np.cos(-th)],angle_rotation)
                         filaments.append((old,new))
                         old=new
 
@@ -649,7 +649,7 @@ if __name__ == "__main__":
     # Uwake=10
     bem.rpm=40
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=100, track_convergence=True)
+    output = bem.Lifting_line(resolution=10, track_convergence=True)
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output

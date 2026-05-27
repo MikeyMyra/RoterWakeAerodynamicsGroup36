@@ -254,3 +254,7 @@ def lifting_line(
     results['A_tangential']        = A_tangential
 
     return results
+
+
+
+# lifting_line()
