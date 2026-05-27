@@ -42,10 +42,9 @@ def polar_airfoil(alpha):
 
 
 def geo_blade(r_R):
-    pitch = 2.0
-    chord = 3.0 * (1 - r_R) + 1
-    twist = -14.0 * (1 - r_R)
-    return chord, twist + pitch
+    chord = 0.18 -0.06 * r_R
+    twist = -50 * r_R + 35 + 46 + 0.7*50 - 34
+    return chord, twist
 
 
 def velocity_3d_from_vortex_filament(gamma, xv1, xv2, xvp, core=1e-5):
@@ -232,11 +231,11 @@ def solve_lifting_line_system_matrix_approach(rotor_wake_system, wind, omega, ro
 def solve_rotor_lifting_line(TSR, n_elements, n_rotations):
     s_raw         = np.linspace(0, np.pi, n_elements + 1)
     r_array_norm  = (-(np.cos(s_raw) - 1) / 2) * 0.8 + 0.2
-    radius        = 50.0
+    radius        = 0.7
     span_array    = r_array_norm * radius
     max_radius    = np.max(span_array)
-    u_inf         = 1.0
-    n_blades      = 3
+    u_inf         = 60.0
+    n_blades      = 6
     theta_array   = np.arange(0, n_rotations * 2 * np.pi, np.pi / 10)
 
     rotor_wake_system = create_rotor_geometry(
