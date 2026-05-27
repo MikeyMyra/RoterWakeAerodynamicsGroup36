@@ -649,7 +649,7 @@ if __name__ == "__main__":
     # Uwake=10
     bem.rpm=40
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=100, track_convergence=True)
+    output = bem.Lifting_line(resolution=10, track_convergence=True)
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
@@ -657,6 +657,19 @@ if __name__ == "__main__":
     blade_count = bem.n_blades
     station_count = len(r_control)
 
+    r_l = r_control[1:]
+
+    C_T_LL = 0
+    C_Q_LL = 0
+    for i in range(len(r_l)):
+        A_a = 2 * np.pi * r_l[i] * bem.dr[i]
+        C_T_LL += (Fnorm_out[i+1] * blade_count * bem.dr[i]) / (0.5 * bem.rho * bem.U_inf**2 * A_a)
+        C_Q_LL += (Ftan_out[i+1] * blade_count * r_l[i] * bem.dr[i]) / (0.5 * bem.rho * bem.U_inf**2 * A_a * bem.radius)
+
+    C_P_LL = C_Q_LL * bem.omega * bem.radius / bem.U_inf
+    print(f"Total thrust coefficient from lifting line: {C_T_LL:.4f}")
+    print(f"Total torque coefficient from lifting line: {C_Q_LL:.4f}")
+    print(f"Total power coefficient from lifting line: {C_P_LL:.4f}")
 
 
     def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
