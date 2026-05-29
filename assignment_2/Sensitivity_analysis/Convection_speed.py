@@ -8,9 +8,8 @@ from Lifting_line import BEM
 
 a_ind_wake_lst=np.array([0,0.5,1])  #np.linspace(0,1,10)
 res=20
-bem=BEM(2)
 i=0
-bem = BEM(J=2)
+bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)
 tend=5
 dt=0.1
 bem.tlst=np.arange(0,tend,dt)
@@ -61,13 +60,6 @@ for a_ind_wake in a_ind_wake_lst:
                 # if all blades identical, plot a single line
                 if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
                     ax.plot(x_masked, blade_series[0], style,label=f'{label_prefix}')
-                    # ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
-                            # va='top', ha='left', fontsize=9)
-                    # if all blades identical, plot a single line
-                # if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
-                #     ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
-                #     ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
-                #             va='top', ha='left', fontsize=9)
                 else:
                     for blade_idx, series in enumerate(blade_series, start=1):
                         ax.plot(x_masked, series, style,label=f'{label_prefix}')
@@ -122,9 +114,6 @@ for a_ind_wake in a_ind_wake_lst:
         try:
             if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
                 axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],label=r'$\epsilon\, (a_w=$' f'{a_ind_wake})')
-                # axs[1, 1].set_title('Convergence history')
-                # axs[1, 1].set_xlabel('Iteration')
-                # axs[1, 1].set_ylabel('Relative error')
                 axs[1, 1].grid(True)
             else:
                 axs[1, 1].axis('off')
@@ -147,9 +136,6 @@ for a_ind_wake in a_ind_wake_lst:
         try:
             if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
                 axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],label=r'$\epsilon\, (a_w=$' f'{a_ind_wake})')
-                # axs[1, 1].set_title('Convergence history')
-                # axs[1, 1].set_xlabel('Iteration')
-                # axs[1, 1].set_ylabel('Relative error')
                 axs[1, 1].grid(True)
             else:
                 axs[1, 1].axis('off')
@@ -168,53 +154,58 @@ axs[1, 1].set_xlabel('Iteration')
 axs[1,1].legend()
 # plt.show()
 
-fig=plt.figure()
-ax=fig.subplots(1,1)
-for i in range(len(a_ind_wake_lst)-1):
-    plot_blade_overlay(ax,r_control,abs((Gamma_out_lst[0]-Gamma_out_lst[i+1])/Gamma_out_lst[0])*100, r'$\Gamma\,(a_w=$'f'{a_ind_wake_lst[i+1]})')
-finish_axis(ax, 'Circulation Difference vs radius Compared to 'r'$ a_w=0 $',   r'$\Gamma\,(\%)$')
+# --- Difference plots (all in percentage, consistent format) ---
 
+fig = plt.figure()
+ax = fig.subplots(1, 1)
+for i in range(len(a_ind_wake_lst) - 1):
+    plot_blade_overlay(ax, r_control,
+                       abs((Gamma_out_lst[0] - Gamma_out_lst[i + 1]) / Gamma_out_lst[0]) * 100,
+                       r'$\Gamma\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+finish_axis(ax,
+            r'Circulation difference vs radius compared to $a_w=0$',
+            r'$|\Delta\Gamma|$ (%)')
 
-fig=plt.figure()
-ax=fig.subplots(1,1)
-for i in range(len(a_ind_wake_lst)-1):
-    plot_blade_overlay(ax,r_control,(a_out_lst[0]-a_out_lst[i+1])/a_out_lst[0], r'$a\,(a_w$' f'={a_ind_wake_lst[i+1]})')
-finish_axis(ax, 'Axial Induction Factor', 'Induction factor')
+fig = plt.figure()
+ax = fig.subplots(1, 1)
+for i in range(len(a_ind_wake_lst) - 1):
+    plot_blade_overlay(ax, r_control,
+                       abs((a_out_lst[0] - a_out_lst[i + 1]) / a_out_lst[0]) * 100,
+                       r'$a\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+finish_axis(ax,
+            r'Axial induction factor difference vs radius compared to $a_w=0$',
+            r'$|\Delta a|$ (%)')
 
+fig = plt.figure()
+ax = fig.subplots(1, 1)
+for i in range(len(a_ind_wake_lst) - 1):
+    plot_blade_overlay(ax, r_control,
+                       abs((aline_out_lst[0] - aline_out_lst[i + 1]) / aline_out_lst[0]) * 100,
+                       r'$a^\prime\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+finish_axis(ax,
+            r'Tangential induction factor difference vs radius compared to $a_w=0$',
+            r'$|\Delta a^\prime|$ (%)')
 
-fig=plt.figure()
-ax=fig.subplots(1,1)
-for i in range(len(a_ind_wake_lst)-1):
-    plot_blade_overlay(ax,r_control,(aline_out_lst[0]-aline_out_lst[i+1])/aline_out_lst[0],r'$a^\prime\,(a_w$' f'={a_ind_wake_lst[i+1]})')
-finish_axis(ax, 'Tangential Induction Factor', 'Induction factor')
+fig = plt.figure()
+ax = fig.subplots(1, 1)
+for i in range(len(a_ind_wake_lst) - 1):
+    plot_blade_overlay(ax, r_control,
+                       abs((Fnorm_out_lst[0] - Fnorm_out_lst[i + 1]) / Fnorm_out_lst[0]) * 100,
+                       r'$F_{norm}\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+finish_axis(ax,
+            r'Normal force difference vs radius compared to $a_w=0$',
+            r'$|\Delta F_{norm}|$ (%)')
 
-
-fig=plt.figure()
-ax=fig.subplots(1,1)
-for i in range(len(a_ind_wake_lst)-1):
-    plot_blade_overlay(ax,r_control,(Fnorm_out_lst[0]-Fnorm_out_lst[i+1])/Fnorm_out_lst[0],r'$ F_{norm}\,(a_w=$' f'{a_ind_wake_lst[i+1]})')
-finish_axis(ax, 'normal Force', 'Force per unit Span')
-
-
-fig=plt.figure()
-ax=fig.subplots(1,1)
-for i in range(len(a_ind_wake_lst)-1):
-    plot_blade_overlay(ax,r_control,(Ftan_out_lst[0]-Ftan_out_lst[i+1])/Ftan_out_lst[0],r'$ F_{tan}\,(a_w=$' f'{a_ind_wake_lst[i+1]})')
-finish_axis(ax, 'normal Force', 'Force per unit Span')
+fig = plt.figure()
+ax = fig.subplots(1, 1)
+for i in range(len(a_ind_wake_lst) - 1):
+    plot_blade_overlay(ax, r_control,
+                       abs((Ftan_out_lst[0] - Ftan_out_lst[i + 1]) / Ftan_out_lst[0]) * 100,
+                       r'$F_{tan}\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+finish_axis(ax,
+            r'Tangential force difference vs radius compared to $a_w=0$',
+            r'$|\Delta F_{tan}|$ (%)')
 
 
 plt.tight_layout()
-
 plt.show()
-
-
-
-
-
-
-
-
-
-
-
-

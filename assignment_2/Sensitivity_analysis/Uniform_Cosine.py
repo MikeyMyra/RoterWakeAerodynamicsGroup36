@@ -1,163 +1,182 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import sys 
+import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Lifting_line import BEM
 
-a_ind_wake_lst=np.array([0,0])  #np.linspace(0,1,10)
-res=20
-bem=BEM(2)
-i=0
-bem = BEM(J=2)
-tend=5
-dt=0.1
-bem.tlst=np.arange(0,tend,dt)
-# Uwake=10
-bem.rpm=40
+bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)
+tend = 5
+dt = 0.1
+bem.tlst = np.arange(0, tend, dt)
+bem.rpm = 40
 
-for a_ind_wake in a_ind_wake_lst:
-    # bem.Lifting_line(20,a_ind_wake)
-    
-    # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    if i==0:
-        output = bem.Lifting_line(resolution=10,a_ind_wake=a_ind_wake, track_convergence=True)
-    else:
-        output = bem.Lifting_line(resolution=10,a_ind_wake=a_ind_wake, track_convergence=True,spacing='cosine')
+# Each entry: (label, kwargs passed to Lifting_line)
+runs = [
+    ('linear',  dict(resolution=10, spacing='linear',  track_convergence=True)),
+    ('cosine',  dict(resolution=10, spacing='cosine',  track_convergence=True)),
+]
 
+a_out_lst     = []
+aline_out_lst = []
+Fnorm_out_lst = []
+Ftan_out_lst  = []
+Gamma_out_lst = []
+r_control_lst = []
+alpha_out_lst = []
+conv_hist_lst = []
+labels        = []
 
-    # Unpack outputs
+for label, kwargs in runs:
+    output = bem.Lifting_line(**kwargs)
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
 
-    blade_count = bem.n_blades
-    station_count = len(r_control)
+    a_out_lst.append(a_out)
+    aline_out_lst.append(aline_out)
+    Fnorm_out_lst.append(Fnorm_out)
+    Ftan_out_lst.append(Ftan_out)
+    Gamma_out_lst.append(Gamma_out)
+    r_control_lst.append(r_control)
+    alpha_out_lst.append(alpha_out)
+    conv_hist_lst.append(conv_hist)
+    labels.append(label)
+
+blade_count = bem.n_blades
 
 
-    if i==0:
-        def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
-            x_values = np.asarray(x_values)
-            y_values = np.asarray(y_values)
-
-            # remove r_index == 0 control points
-            x_masked = x_values[1:]
-
-            if station_count > 0 and len(y_values) == blade_count * station_count:
-                blade_series = [np.asarray(y_values[i * station_count:(i + 1) * station_count])[1:] for i in range(blade_count)]
-                # if all blades identical, plot a single line
-                if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
-                    ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
-                    ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
-                            va='top', ha='left', fontsize=9)
-                else:
-                    for blade_idx, series in enumerate(blade_series, start=1):
-                        ax.plot(x_masked, series, style, label=f'{label_prefix} blade {blade_idx}')
-            else:
-                ax.plot(x_masked, y_values[1:], style, label=label_prefix)
-
-        def finish_axis(ax, title, ylabel):
-            ax.set_title(title)
-            ax.set_xlabel('r (m)')
-            ax.set_ylabel(ylabel)
-            # add vertical line showing blade start location
-            try:
-                blade_root_r = bem.blade_start_fraction * bem.radius
-                ax.axvline(blade_root_r, color='k', linestyle='--', linewidth=1, label='blade start')
-            except Exception:
-                pass
-            ax.legend()
-            ax.grid(True)
+def extract_blade0(arr, station_count):
+    """Return blade-0 slice, skipping hub point at index 0."""
+    return np.asarray(arr[:station_count])[1:]
 
 
-        fig, axs = plt.subplots(2, 3, figsize=(15, 8))
-
-        # Circulation
-        try:
-            plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma (linear)')
-        except Exception:
-            pass
-
-        # Axial and azimuthal induction
-        try:
-            plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,$' f'(linear)')
-            plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime$' f'(linear)', style='-s')
-        except Exception:
-            pass
-
-        # Forces
-        try:
-            plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}$' f'(linear)')
-            plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}$' f'(linear)', style='-s')
-        except Exception:
-            pass
-
-        # Angle of attack
-        try:
-            plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,$' f'(linear)', style='-^')
-
-            # overlay BEM AoA
-        except Exception:
-            pass
-
-        # Convergence history
-        try:
-            if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
-                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],label=r'$\epsilon\,$' f'(linear)')
-                # axs[1, 1].set_title('Convergence history')
-                # axs[1, 1].set_xlabel('Iteration')
-                # axs[1, 1].set_ylabel('Relative error')
-                axs[1, 1].grid(True)
-            else:
-                axs[1, 1].axis('off')
-        except Exception:
-            axs[1, 1].axis('off')
-
-    else:
-        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma (cosine)' )
+def get_r(r_control):
+    return np.asarray(r_control)[1:]
 
 
-        plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,$' f'(cosine)')
-        plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,$' f'(cosine)', style='-s')
+# ------------------------------------------------------------------
+# Common fine reference grid — bounded by the overlap of all runs
+# so we never extrapolate outside any run's range.
+# ------------------------------------------------------------------
+N_REF = 300
+r_min = max(get_r(rc)[0]  for rc in r_control_lst)
+r_max = min(get_r(rc)[-1] for rc in r_control_lst)
+r_ref = np.linspace(r_min, r_max, N_REF)
 
 
-        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out,  r'$ F_{norm}\,$' f'(cosine)')
-        plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,$' f'(cosine)', style='-s')
-
-        plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,$' f'(cosine)', style='-^')
-
-        try:
-            if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
-                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],label=r'$\epsilon\,$' f'(cosine)')
-                # axs[1, 1].set_title('Convergence history')
-                # axs[1, 1].set_xlabel('Iteration')
-                # axs[1, 1].set_ylabel('Relative error')
-                axs[1, 1].grid(True)
-            else:
-                axs[1, 1].axis('off')
-        except Exception:
-            axs[1, 1].axis('off')
+def interp_to_ref(arr, r_control):
+    sc = len(r_control)
+    r  = get_r(r_control)
+    y  = extract_blade0(arr, sc)
+    return np.interp(r_ref, r, y)
 
 
-    i=i+1
-finish_axis(axs[0, 0], 'Circulation vs radius', 'Gamma (m^2/s)')
-finish_axis(axs[0, 1], 'Induction factors', 'Induction factor')
-finish_axis(axs[1, 0], 'Section forces', 'Force per unit span')
-finish_axis(axs[0, 2], 'Angle of attack', 'AoA (degrees)')
+quantities = {
+    'Gamma': Gamma_out_lst,
+    'a':     a_out_lst,
+    'aline': aline_out_lst,
+    'Fnorm': Fnorm_out_lst,
+    'Ftan':  Ftan_out_lst,
+    'alpha': alpha_out_lst,
+}
+interp = {key: [interp_to_ref(lst[i], r_control_lst[i]) for i in range(len(runs))]
+          for key, lst in quantities.items()}
+
+
+def finish_axis(ax, title, ylabel):
+    ax.set_title(title)
+    ax.set_xlabel('r (m)')
+    ax.set_ylabel(ylabel)
+    try:
+        blade_root_r = bem.blade_start_fraction * bem.radius
+        ax.axvline(blade_root_r, color='k', linestyle='--', linewidth=1, label='blade root')
+    except Exception:
+        pass
+    ax.legend()
+    ax.grid(True)
+
+
+# ------------------------------------------------------------------
+# Show original (non-interpolated) r_control points as rug plots so
+# it's clear where each spacing actually places its control points.
+# ------------------------------------------------------------------
+styles     = ['-o', '-s']
+rug_colors = ['tab:blue', 'tab:orange']
+
+fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+fig.suptitle('Lifting-line results — cosine vs linear spacing on common reference grid')
+
+for i, label in enumerate(labels):
+    style = styles[i % len(styles)]
+    axs[0, 0].plot(r_ref, interp['Gamma'][i], style, label=label)
+    axs[0, 1].plot(r_ref, interp['a'][i],     style, label=f'a  ({label})')
+    axs[0, 1].plot(r_ref, interp['aline'][i], style, label=f"a' ({label})", alpha=0.6)
+    axs[1, 0].plot(r_ref, interp['Fnorm'][i], style, label=f'Fnorm ({label})')
+    axs[1, 0].plot(r_ref, interp['Ftan'][i],  style, label=f'Ftan  ({label})', alpha=0.6)
+    axs[0, 2].plot(r_ref, interp['alpha'][i], style, label=label)
+
+    # Rug: show where actual control points sit
+    r_actual = get_r(r_control_lst[i])
+    for ax in [axs[0, 0], axs[0, 1], axs[1, 0], axs[0, 2]]:
+        ax.plot(r_actual, np.full_like(r_actual, ax.get_ylim()[0] if ax.get_ylim()[0] != 0 else 0),
+                '|', color=rug_colors[i], markersize=8, alpha=0.5)
+
+finish_axis(axs[0, 0], 'Circulation vs radius',   r'$\Gamma$ (m²/s)')
+finish_axis(axs[0, 1], 'Induction factors',        'Induction factor')
+finish_axis(axs[1, 0], 'Section forces',           'Force per unit span (N/m)')
+finish_axis(axs[0, 2], 'Angle of attack',          'AoA (deg)')
+
+for i, (label, conv_hist) in enumerate(zip(labels, conv_hist_lst)):
+    try:
+        if conv_hist and len(conv_hist['error']) > 0:
+            axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],
+                               styles[i % len(styles)], label=label)
+    except Exception:
+        pass
+
 axs[1, 1].set_title('Convergence history')
-axs[1, 1].set_ylabel('Relative error')
 axs[1, 1].set_xlabel('Iteration')
-axs[1,1].legend()
-
-
-
-
-
-
+axs[1, 1].set_ylabel('Relative error')
+axs[1, 1].legend()
+axs[1, 1].grid(True)
+axs[1, 2].axis('off')
 
 plt.tight_layout()
+
+# ------------------------------------------------------------------
+# Difference plots: cosine vs linear, on common reference grid
+# ------------------------------------------------------------------
+diff_specs = [
+    ('Gamma', r'$\Gamma$',  'Circulation'),
+    ('a',     r'$a$',       'Axial induction factor'),
+    ('aline', r"$a'$",      'Tangential induction factor'),
+    ('Fnorm', r'$F_{norm}$','Normal force'),
+    ('Ftan',  r'$F_{tan}$', 'Tangential force'),
+]
+
+lin_idx = labels.index('linear')
+cos_idx = labels.index('cosine')
+
+fig2, axs2 = plt.subplots(2, 3, figsize=(15, 8))
+fig2.suptitle('Percentage difference: cosine vs linear — evaluated on common reference grid')
+axs2_flat = axs2.flatten()
+
+for ax_idx, (key, sym, name) in enumerate(diff_specs):
+    ax    = axs2_flat[ax_idx]
+    y_lin = interp[key][lin_idx]
+    y_cos = interp[key][cos_idx]
+    denom = np.where(np.abs(y_lin) > 1e-10, np.abs(y_lin), np.nan)
+    diff  = np.abs(y_lin - y_cos) / denom * 100
+    ax.plot(r_ref, diff, '-o', label='cosine vs linear')
+
+    # Shade tip and root regions where cosine adds extra density
+    r_actual_lin = get_r(r_control_lst[lin_idx])
+    dr_lin = np.mean(np.diff(r_actual_lin))
+    ax.axvspan(r_ref[0],  r_ref[0]  + dr_lin, alpha=0.1, color='green', label='cosine-dense region')
+    ax.axvspan(r_ref[-1] - dr_lin, r_ref[-1], alpha=0.1, color='green')
+
+    finish_axis(ax, f'{name} difference', f'|Δ{sym}| (%)')
+
+axs2_flat[-1].axis('off')
+plt.tight_layout()
 plt.show()
-
-
-
-
-
