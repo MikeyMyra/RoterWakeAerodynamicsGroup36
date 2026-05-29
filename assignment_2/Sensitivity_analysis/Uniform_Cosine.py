@@ -6,7 +6,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Lifting_line import BEM
 
-bem = BEM(J=2)
+bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)
 tend = 5
 dt = 0.1
 bem.tlst = np.arange(0, tend, dt)
