@@ -9,36 +9,33 @@ from matplotlib.cm import ScalarMappable
 
 # ── airfoil polar ─────────────────────────────────────────────────────────────
 
-polar_alpha = [-180, -16.062, -15.506, -15.064, -14.589, -14.109, -13.698,
-               -13.237, -12.745, -12.268, -11.748, -11.183, -10.768, -10.231,
-               -9.743, -9.223, -8.209, -7.187, -6.162, -5.143, -4.127, -3.106,
-               -2.073, -1.04, .017, 1.025, 2.042, 3.096, 4.114, 5.126, 6.163,
-               7.189, 7.713, 8.216, 8.734, 9.251, 9.558, 9.771, 10.269, 10.757,
-               11.257, 11.761, 12.239, 13.224, 14.234, 15.227, 16.208, 17.201,
-               18.2, 19.201, 20.189, 21.179, 22.162, 23.144, 23.547, 24.062,
-               25.056, 26.06, 27.059, 28.062, 29.062, 30.056, 180]
+def _get_airfoil():
+    
+    data = []
+    with open("assignment_2\\ARAD8pct_polar.txt", "r") as file:
+        for line in file:
+            row = line.strip().split()
+            data.append(row)
+    data = data[2:]
+    
+    AoA = [float(row[0]) for row in data]
+    cl  = [float(row[1]) for row in data]
+    cd  = [float(row[2]) for row in data]
+    cm  = [float(row[3]) for row in data]
+    
+    return AoA, cl, cd, cm
 
-polar_cl = [-0, -.425, -.43, -.461, -.496, -.567, -.682, -.719, -.755, -.77,
-            -.774, -.77, -.756, -.736, -.711, -.68, -.612, -.529, -.434, -.337,
-            -.237, -.127, -.014, .102, .217, .33, .445, .571, .683, .792, .902,
-            1.014, 1.068, 1.12, 1.168, 1.207, 1.227, 1.229, 1.215, 1.192,
-            1.173, 1.148, 1.126, 1.103, 1.093, 1.077, 1.06, 1.038, 1.047,
-            1.043, 1.04, 1.029, 1.023, 1.007, .829, .854, .877, .89, .953,
-            .976, 1.016, 1.041, 0]
+AoA, cl, cd, cm = _get_airfoil()
 
-polar_cd = [0.1, .225, .217, .211, .208, .201, .077, .05, .039, .033, .029,
-            .025, .023, .02, .018, .017, .014, .013, .011, .01, .008, .008,
-            .008, .007, .007, .008, .008, .008, .008, .009, .009, .009, .009,
-            .01, .01, .01, .012, .013, .019, .025, .036, .045, .053, .066,
-            .076, .089, .104, .117, .132, .152, .172, .198, .228, .261, .416,
-            .436, .466, .491, .541, .574, .616, .652, 0.1]
 
-_cl_interp = interp1d(polar_alpha, polar_cl, kind='linear', fill_value='extrapolate')
-_cd_interp = interp1d(polar_alpha, polar_cd, kind='linear', fill_value='extrapolate')
+_cl_interp = interp1d(AoA, cl, kind='linear', fill_value='extrapolate')
+_cd_interp = interp1d(AoA, cd, kind='linear', fill_value='extrapolate')
 
 
 def polar_airfoil(alpha):
+    alpha = np.clip(alpha, min(AoA), max(AoA))
     return float(_cl_interp(alpha)), float(_cd_interp(alpha))
+
 
 
 def geo_blade(r_R):
@@ -78,7 +75,6 @@ def update_gamma_single_ring(ring, gamma_new, weight_new):
         fil['Gamma'] = fil['Gamma'] * (1 - weight_new) + weight_new * gamma_new
     return ring
 
-@staticmethod
 def _get_isa_density(h): 
     
     T0, p0, L, R, g = 288.15, 101325, 0.0065, 287.05, 9.80665
@@ -93,9 +89,8 @@ def load_blade_element(v_norm, v_tan, r_R):
     vmag2        = v_norm**2 + v_tan**2
     inflow_angle = np.arctan2(v_norm, v_tan)
     chord, twist = geo_blade(r_R)
-    alpha        = twist + np.degrees(inflow_angle)
-    cl, cd       = polar_airfoil(alpha)
-    cd           = 0.0
+    alpha        = twist - np.degrees(inflow_angle)
+    cl, cd       = polar_airfoil(alpha) 
     lift  = 0.5 * vmag2 * cl * chord * _get_isa_density(2000)
     drag  = 0.5 * vmag2 * cd * chord * _get_isa_density(2000)
     f_norm = lift * np.cos(inflow_angle) + drag * np.sin(inflow_angle)
@@ -147,7 +142,7 @@ def create_rotor_geometry(span_array, radius, tip_speed_ratio, u_inf, theta_arra
                 xt = filaments[-1]['x1']; yt = filaments[-1]['y1']; zt = filaments[-1]['z1']
                 dy = (np.cos(-theta_array[j+1]) - np.cos(-theta_array[j])) * span_array[i]
                 dz = (np.sin(-theta_array[j+1]) - np.sin(-theta_array[j])) * span_array[i]
-                dx = (theta_array[j+1] - theta_array[j]) / tip_speed_ratio * radius
+                dx = (theta_array[j+1] - theta_array[j]) / (np.pi * tip_speed_ratio / radius)
                 filaments.append({'x1': xt+dx, 'y1': yt+dy, 'z1': zt+dz,
                                   'x2': xt,    'y2': yt,    'z2': zt,    'Gamma': 0})
 
@@ -162,7 +157,7 @@ def create_rotor_geometry(span_array, radius, tip_speed_ratio, u_inf, theta_arra
                 xt = filaments[-1]['x2']; yt = filaments[-1]['y2']; zt = filaments[-1]['z2']
                 dy = (np.cos(-theta_array[j+1]) - np.cos(-theta_array[j])) * span_array[i+1]
                 dz = (np.sin(-theta_array[j+1]) - np.sin(-theta_array[j])) * span_array[i+1]
-                dx = (theta_array[j+1] - theta_array[j]) / tip_speed_ratio * radius
+                dx = (theta_array[j+1] - theta_array[j]) / (np.pi * tip_speed_ratio / radius)
                 filaments.append({'x1': xt,    'y1': yt,    'z1': zt,
                                   'x2': xt+dx, 'y2': yt+dy, 'z2': zt+dz, 'Gamma': 0})
 
@@ -180,8 +175,8 @@ def create_rotor_geometry(span_array, radius, tip_speed_ratio, u_inf, theta_arra
 
 
 def solve_lifting_line_system_matrix_approach(rotor_wake_system, wind, omega, rotor_radius,
-                                               n_iterations=1200, error_limit=0.01,
-                                               conv_weight=0.3):
+                                               n_iterations=1200, error_limit=1e-6,
+                                               conv_weight=0.1):
     controlpoints = rotor_wake_system['controlpoints']
     rings         = rotor_wake_system['rings']
     wind          = np.array(wind)
@@ -250,14 +245,14 @@ def solve_rotor_lifting_line(TSR, n_elements, n_rotations):
 
     rotor_wake_system = create_rotor_geometry(
         span_array, max_radius,
-        tip_speed_ratio = TSR / (1 - 0.2),
+        tip_speed_ratio = TSR,
         u_inf           = u_inf,
         theta_array     = theta_array,
         n_blades        = n_blades,
     )
     results = solve_lifting_line_system_matrix_approach(
-        rotor_wake_system, wind=[1, 0, 0],
-        omega=TSR / max_radius, rotor_radius=max_radius,
+        rotor_wake_system, wind=[60, 0, 0],
+        omega=np.pi * TSR * u_inf / (max_radius), rotor_radius=max_radius,
     )
     return results, rotor_wake_system
 
@@ -275,7 +270,7 @@ def make_plots(results, wake, TSR):
     Ftan   = results['Ftan']
 
     # ── per-blade strip (first blade: first n_el control points) ──────────────
-    n_el   = len(r_R) // 3          # 3 blades
+    n_el   = len(r_R) // 6          # 6 blades
     r_R1   = r_R[:n_el]
     a1     = a[:n_el]
     al1    = aline[:n_el]
@@ -488,7 +483,7 @@ def make_plots(results, wake, TSR):
 
 if __name__ == "__main__":
     TSR         = 1/1.6
-    N_ELEMENTS  = 20
+    N_ELEMENTS  = 40
     N_ROTATIONS = 4
 
     results, wake = solve_rotor_lifting_line(TSR, N_ELEMENTS, N_ROTATIONS)
