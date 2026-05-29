@@ -43,7 +43,7 @@ def polar_airfoil(alpha):
 
 def geo_blade(r_R):
     chord = 0.18 -0.06 * r_R
-    twist = -50 * r_R + 35 + 46 + 0.7*50 - 34
+    twist = -50 * r_R + 35 + 46 + 0.7*50 - 35
     return chord, twist
 
 
@@ -78,6 +78,16 @@ def update_gamma_single_ring(ring, gamma_new, weight_new):
         fil['Gamma'] = fil['Gamma'] * (1 - weight_new) + weight_new * gamma_new
     return ring
 
+@staticmethod
+def _get_isa_density(h): 
+    
+    T0, p0, L, R, g = 288.15, 101325, 0.0065, 287.05, 9.80665
+    
+    T = T0 - L*h
+    p = p0 * (T/T0)**(g/(R*L))
+    rho = p/(R*T)
+    
+    return rho
 
 def load_blade_element(v_norm, v_tan, r_R):
     vmag2        = v_norm**2 + v_tan**2
@@ -86,8 +96,8 @@ def load_blade_element(v_norm, v_tan, r_R):
     alpha        = twist + np.degrees(inflow_angle)
     cl, cd       = polar_airfoil(alpha)
     cd           = 0.0
-    lift  = 0.5 * vmag2 * cl * chord
-    drag  = 0.5 * vmag2 * cd * chord
+    lift  = 0.5 * vmag2 * cl * chord * _get_isa_density(2000)
+    drag  = 0.5 * vmag2 * cd * chord * _get_isa_density(2000)
     f_norm = lift * np.cos(inflow_angle) + drag * np.sin(inflow_angle)
     f_tan  = lift * np.sin(inflow_angle) - drag * np.cos(inflow_angle)
     gamma  = 0.5 * np.sqrt(vmag2) * cl * chord
@@ -355,7 +365,7 @@ def make_plots(results, wake, TSR):
     ax3d.tick_params(colors="#8b949e")
 
     cmap   = plt.cm.plasma
-    radius = 50.0
+    radius = 0.7
 
     # collect all filament endpoints → radial position for colour
     all_fils = []
@@ -409,8 +419,8 @@ def make_plots(results, wake, TSR):
     ax3b.tick_params(colors="#8b949e")
 
     n_r     = 60
-    n_blades = 3
-    r_norm  = np.linspace(0.2, 1.0, n_r)
+    n_blades = 6
+    r_norm  = np.linspace(0.25, 1, n_r)
     chords  = np.array([geo_blade(r)[0] for r in r_norm])
     twists  = np.array([np.radians(geo_blade(r)[1]) for r in r_norm])
     r_abs   = r_norm * radius
@@ -477,9 +487,9 @@ def make_plots(results, wake, TSR):
 # ── main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    TSR         = 0.01555555
+    TSR         = 1/1.6
     N_ELEMENTS  = 20
-    N_ROTATIONS = 0.1
+    N_ROTATIONS = 4
 
     results, wake = solve_rotor_lifting_line(TSR, N_ELEMENTS, N_ROTATIONS)
     make_plots(results, wake, TSR)
