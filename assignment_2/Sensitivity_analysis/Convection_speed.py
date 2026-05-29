@@ -16,7 +16,15 @@ dt=0.1
 bem.tlst=np.arange(0,tend,dt)
 # Uwake=10
 bem.rpm=40
-
+a_out_lst=[]
+aline_out_lst=[]
+Fnorm_out_lst=[]
+Ftan_out_lst=[]
+Gamma_out_lst=[]
+conv_iter_lst=[]
+conv_hist_lst=[]
+r_control_lst=[]
+alpha_out_lst=[]
 for a_ind_wake in a_ind_wake_lst:
     # bem.Lifting_line(20,a_ind_wake)
     
@@ -25,6 +33,16 @@ for a_ind_wake in a_ind_wake_lst:
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
+    a_out_lst.append(a_out)
+    aline_out_lst.append(aline_out)
+    Fnorm_out_lst.append(Fnorm_out)
+    Ftan_out_lst.append(Ftan_out)
+    Gamma_out_lst.append(Gamma_out)
+    conv_iter_lst.append(conv_iter)
+    conv_hist_lst.append(conv_hist)
+    r_control_lst.append(r_control)
+    alpha_out_lst.append(alpha_out)
+
 
     blade_count = bem.n_blades
     station_count = len(r_control)
@@ -42,12 +60,17 @@ for a_ind_wake in a_ind_wake_lst:
                 blade_series = [np.asarray(y_values[i * station_count:(i + 1) * station_count])[1:] for i in range(blade_count)]
                 # if all blades identical, plot a single line
                 if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
-                    ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
-                    ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
-                            va='top', ha='left', fontsize=9)
+                    ax.plot(x_masked, blade_series[0], style,label=f'{label_prefix}')
+                    # ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
+                            # va='top', ha='left', fontsize=9)
+                    # if all blades identical, plot a single line
+                # if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
+                #     ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
+                #     ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
+                #             va='top', ha='left', fontsize=9)
                 else:
                     for blade_idx, series in enumerate(blade_series, start=1):
-                        ax.plot(x_masked, series, style, label=f'{label_prefix} blade {blade_idx}')
+                        ax.plot(x_masked, series, style,label=f'{label_prefix}')
             else:
                 ax.plot(x_masked, y_values[1:], style, label=label_prefix)
 
@@ -69,7 +92,7 @@ for a_ind_wake in a_ind_wake_lst:
 
         # Circulation
         try:
-            plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma' r'$\,(a_w=$'f'{a_ind_wake})')
+            plot_blade_overlay(axs[0, 0], r_control, Gamma_out, r'$\Gamma\,(a_w=$'f'{a_ind_wake})')
         except Exception:
             pass
 
@@ -109,7 +132,7 @@ for a_ind_wake in a_ind_wake_lst:
             axs[1, 1].axis('off')
 
     else:
-        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma' r'$\,(a_w=$'f'{a_ind_wake})')
+        plot_blade_overlay(axs[0, 0], r_control, Gamma_out,  r'$\Gamma\,(a_w=$'f'{a_ind_wake})')
 
 
         plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,(a_w$' f'={a_ind_wake})')
@@ -135,7 +158,7 @@ for a_ind_wake in a_ind_wake_lst:
 
 
     i=i+1
-finish_axis(axs[0, 0], 'Circulation vs radius', 'Gamma (m^2/s)')
+finish_axis(axs[0, 0], 'Circulation vs radius', r'$\Gamma$' '(m^2/s)')
 finish_axis(axs[0, 1], 'Induction factors', 'Induction factor')
 finish_axis(axs[1, 0], 'Section forces', 'Force per unit span')
 finish_axis(axs[0, 2], 'Angle of attack', 'AoA (degrees)')
@@ -143,15 +166,53 @@ axs[1, 1].set_title('Convergence history')
 axs[1, 1].set_ylabel('Relative error')
 axs[1, 1].set_xlabel('Iteration')
 axs[1,1].legend()
+# plt.show()
+
+fig=plt.figure()
+ax=fig.subplots(1,1)
+for i in range(len(a_ind_wake_lst)-1):
+    plot_blade_overlay(ax,r_control,abs((Gamma_out_lst[0]-Gamma_out_lst[i+1])/Gamma_out_lst[0])*100, r'$\Gamma\,(a_w=$'f'{a_ind_wake_lst[i+1]})')
+finish_axis(ax, 'Circulation Difference vs radius Compared to 'r'$ a_w=0 $',   r'$\Gamma\,(\%)$')
 
 
+fig=plt.figure()
+ax=fig.subplots(1,1)
+for i in range(len(a_ind_wake_lst)-1):
+    plot_blade_overlay(ax,r_control,(a_out_lst[0]-a_out_lst[i+1])/a_out_lst[0], r'$a\,(a_w$' f'={a_ind_wake_lst[i+1]})')
+finish_axis(ax, 'Axial Induction Factor', 'Induction factor')
 
 
+fig=plt.figure()
+ax=fig.subplots(1,1)
+for i in range(len(a_ind_wake_lst)-1):
+    plot_blade_overlay(ax,r_control,(aline_out_lst[0]-aline_out_lst[i+1])/aline_out_lst[0],r'$a^\prime\,(a_w$' f'={a_ind_wake_lst[i+1]})')
+finish_axis(ax, 'Tangential Induction Factor', 'Induction factor')
 
+
+fig=plt.figure()
+ax=fig.subplots(1,1)
+for i in range(len(a_ind_wake_lst)-1):
+    plot_blade_overlay(ax,r_control,(Fnorm_out_lst[0]-Fnorm_out_lst[i+1])/Fnorm_out_lst[0],r'$ F_{norm}\,(a_w=$' f'{a_ind_wake_lst[i+1]})')
+finish_axis(ax, 'normal Force', 'Force per unit Span')
+
+
+fig=plt.figure()
+ax=fig.subplots(1,1)
+for i in range(len(a_ind_wake_lst)-1):
+    plot_blade_overlay(ax,r_control,(Ftan_out_lst[0]-Ftan_out_lst[i+1])/Ftan_out_lst[0],r'$ F_{tan}\,(a_w=$' f'{a_ind_wake_lst[i+1]})')
+finish_axis(ax, 'normal Force', 'Force per unit Span')
 
 
 plt.tight_layout()
+
 plt.show()
+
+
+
+
+
+
+
 
 
 
