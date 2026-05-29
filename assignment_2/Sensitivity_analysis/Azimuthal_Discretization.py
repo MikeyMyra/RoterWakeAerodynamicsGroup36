@@ -1,32 +1,28 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import sys 
+import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Lifting_line import BEM
 
-res_lst=np.array([5,10,20])  #np.linspace(0,1,10)
-bem=BEM(2)
-i=0
+res_lst = np.array([5, 10, 20])
 bem = BEM(J=2)
-tend=5
-dt=0.1
-bem.tlst=np.arange(0,tend,dt)
-bem.rpm=40
+tend = 5
+dt = 0.1
+bem.tlst = np.arange(0, tend, dt)
+bem.rpm = 40
 
-a_out_lst=[]
-aline_out_lst=[]
-Fnorm_out_lst=[]
-Ftan_out_lst=[]
-Gamma_out_lst=[]
-r_control_lst=[]
+a_out_lst     = []
+aline_out_lst = []
+Fnorm_out_lst = []
+Ftan_out_lst  = []
+Gamma_out_lst = []
+r_control_lst = []
+alpha_out_lst = []
 
 for res in res_lst:
-
     output = bem.Lifting_line(resolution=res, track_convergence=True)
-
-    # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
 
     a_out_lst.append(a_out)
@@ -35,135 +31,136 @@ for res in res_lst:
     Ftan_out_lst.append(Ftan_out)
     Gamma_out_lst.append(Gamma_out)
     r_control_lst.append(r_control)
+    alpha_out_lst.append(alpha_out)
 
-    blade_count = bem.n_blades
-    station_count = len(r_control)
+blade_count = bem.n_blades
 
-    if i==0:
-        def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
-            x_values = np.asarray(x_values)
-            y_values = np.asarray(y_values)
-            x_masked = x_values[1:]
-            if station_count > 0 and len(y_values) == blade_count * station_count:
-                blade_series = [np.asarray(y_values[j * station_count:(j + 1) * station_count])[1:] for j in range(blade_count)]
-                if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
-                    ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
-                    ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
-                            va='top', ha='left', fontsize=9)
-                else:
-                    for blade_idx, series in enumerate(blade_series, start=1):
-                        ax.plot(x_masked, series, style, label=f'{label_prefix} blade {blade_idx}')
-            else:
-                ax.plot(x_masked, y_values[1:], style, label=label_prefix)
 
-        def finish_axis(ax, title, ylabel):
-            ax.set_title(title)
-            ax.set_xlabel('r (m)')
-            ax.set_ylabel(ylabel)
-            try:
-                blade_root_r = bem.blade_start_fraction * bem.radius
-                ax.axvline(blade_root_r, color='k', linestyle='--', linewidth=1, label='blade start')
-            except Exception:
-                pass
-            ax.legend()
-            ax.grid(True)
+def extract_blade0(arr, station_count):
+    """Return blade-0 slice, skipping hub point at index 0."""
+    return np.asarray(arr[:station_count])[1:]
 
-        fig, axs = plt.subplots(2, 3, figsize=(15, 8))
 
-        try:
-            plot_blade_overlay(axs[0, 0], r_control, Gamma_out, f'Gamma (resolution={res})')
-        except Exception:
-            pass
-        try:
-            plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,$' f'(resolution={res})')
-            plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,$' f'(resolution={res})', style='-s')
-        except Exception:
-            pass
-        try:
-            plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}\,$' f'(resolution={res})')
-            plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,$' f'(resolution={res})', style='-s')
-        except Exception:
-            pass
-        try:
-            plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,$' f'(resolution={res})', style='-^')
-        except Exception:
-            pass
-        try:
-            if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error']) > 0:
-                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'], label=r'$\epsilon\,$' f'(resolution={res})')
-                axs[1, 1].grid(True)
-            else:
-                axs[1, 1].axis('off')
-        except Exception:
-            axs[1, 1].axis('off')
+def get_r(r_control):
+    """r values skipping hub point."""
+    return np.asarray(r_control)[1:]
 
-    else:
-        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, f'Gamma (resolution={res})')
-        plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,$' f'(resolution={res})')
-        plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,$' f'(resolution={res})', style='-s')
-        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}\,$' f'(resolution={res})')
-        plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,$' f'(resolution={res})', style='-s')
-        plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,$' f'(resolution={res})', style='-^')
-        try:
-            if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error']) > 0:
-                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'], label=r'$\epsilon\,$' f'(resolution={res})')
-                axs[1, 1].grid(True)
-            else:
-                axs[1, 1].axis('off')
-        except Exception:
-            axs[1, 1].axis('off')
 
-    i += 1
+# ------------------------------------------------------------------
+# Build common fine reference grid
+# Use the innermost and outermost r values across all runs so we
+# never extrapolate, then fill with N_REF points.
+# ------------------------------------------------------------------
+N_REF = 300
+r_min = max(get_r(rc)[0]  for rc in r_control_lst)   # innermost safe point
+r_max = min(get_r(rc)[-1] for rc in r_control_lst)   # outermost safe point
+r_ref = np.linspace(r_min, r_max, N_REF)
 
-finish_axis(axs[0, 0], 'Circulation vs radius', 'Gamma (m^2/s)')
-finish_axis(axs[0, 1], 'Induction factors', 'Induction factor')
-finish_axis(axs[1, 0], 'Section forces', 'Force per unit span')
-finish_axis(axs[0, 2], 'Angle of attack', 'AoA (degrees)')
-axs[1, 1].set_title('Convergence history')
-axs[1, 1].set_ylabel('Relative error')
-axs[1, 1].set_xlabel('Iteration')
-axs[1, 1].legend()
 
-# --- Difference plots: all resolutions vs finest (res_lst[-1]), percentage ---
-# r_control has station_count entries; output arrays have blade_count * station_count.
-# Extract blade-0 slice from outputs: first station_count values.
-# Skip index 0 (hub point) to match the main plots.
-def extract(arr, sc):
-    """Blade-0 slice, skip hub point."""
-    return np.asarray(arr[:sc])[1:]
+def interp_to_ref(arr, r_control):
+    sc = len(r_control)
+    r  = get_r(r_control)
+    y  = extract_blade0(arr, sc)
+    return np.interp(r_ref, r, y)
 
-ref_idx   = -1
-sc_ref    = len(r_control_lst[ref_idx])          # station_count for reference
-r_ref     = np.asarray(r_control_lst[ref_idx])[1:]
 
-y_ref_arrays = {
-    'Gamma': extract(Gamma_out_lst[ref_idx], sc_ref),
-    'a':     extract(a_out_lst[ref_idx],     sc_ref),
-    'aline': extract(aline_out_lst[ref_idx], sc_ref),
-    'Fnorm': extract(Fnorm_out_lst[ref_idx], sc_ref),
-    'Ftan':  extract(Ftan_out_lst[ref_idx],  sc_ref),
+# Interpolate every run onto the common grid
+quantities = {
+    'Gamma': Gamma_out_lst,
+    'a':     a_out_lst,
+    'aline': aline_out_lst,
+    'Fnorm': Fnorm_out_lst,
+    'Ftan':  Ftan_out_lst,
+    'alpha': alpha_out_lst,
 }
+interp = {key: [interp_to_ref(lst[i], r_control_lst[i]) for i in range(len(res_lst))]
+          for key, lst in quantities.items()}
 
-diff_pairs = [
-    ('Gamma', Gamma_out_lst,  r'$\Gamma$',   r'Circulation difference vs radius compared to resolution=' f'{res_lst[-1]}',                 r'$|\Delta\Gamma|$ (%)'),
-    ('a',     a_out_lst,      r'$a$',         r'Axial induction factor difference vs radius compared to resolution=' f'{res_lst[-1]}',       r'$|\Delta a|$ (%)'),
-    ('aline', aline_out_lst,  r"$a^\prime$",  r'Tangential induction factor difference vs radius compared to resolution=' f'{res_lst[-1]}',  r"$|\Delta a^\prime|$ (%)"),
-    ('Fnorm', Fnorm_out_lst,  r'$F_{norm}$',  r'Normal force difference vs radius compared to resolution=' f'{res_lst[-1]}',                r'$|\Delta F_{norm}|$ (%)'),
-    ('Ftan',  Ftan_out_lst,   r'$F_{tan}$',   r'Tangential force difference vs radius compared to resolution=' f'{res_lst[-1]}',            r'$|\Delta F_{tan}|$ (%)'),
+
+def finish_axis(ax, title, ylabel):
+    ax.set_title(title)
+    ax.set_xlabel('r (m)')
+    ax.set_ylabel(ylabel)
+    try:
+        blade_root_r = bem.blade_start_fraction * bem.radius
+        ax.axvline(blade_root_r, color='k', linestyle='--', linewidth=1, label='blade root')
+    except Exception:
+        pass
+    ax.legend()
+    ax.grid(True)
+
+
+# ------------------------------------------------------------------
+# Main overlay plots (on common grid)
+# ------------------------------------------------------------------
+fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+fig.suptitle('Lifting-line results — all resolutions on common reference grid')
+
+styles = ['-o', '-s', '-^']
+
+for i, res in enumerate(res_lst):
+    style = styles[i % len(styles)]
+    axs[0, 0].plot(r_ref, interp['Gamma'][i], style, label=f'res={res}')
+    axs[0, 1].plot(r_ref, interp['a'][i],     style, label=f'a  res={res}')
+    axs[0, 1].plot(r_ref, interp['aline'][i], style, label=f"a' res={res}", alpha=0.6)
+    axs[1, 0].plot(r_ref, interp['Fnorm'][i], style, label=f'Fnorm res={res}')
+    axs[1, 0].plot(r_ref, interp['Ftan'][i],  style, label=f'Ftan  res={res}', alpha=0.6)
+    axs[0, 2].plot(r_ref, interp['alpha'][i], style, label=f'res={res}')
+
+finish_axis(axs[0, 0], 'Circulation vs radius',   r'$\Gamma$ (m²/s)')
+finish_axis(axs[0, 1], 'Induction factors',        'Induction factor')
+finish_axis(axs[1, 0], 'Section forces',           'Force per unit span (N/m)')
+finish_axis(axs[0, 2], 'Angle of attack',          'AoA (deg)')
+
+# Convergence history (raw iteration data, no interpolation needed)
+for i, res in enumerate(res_lst):
+    output = bem.Lifting_line(resolution=res, track_convergence=True)
+    *_, conv_iter, conv_hist, _, _ = output
+    try:
+        if conv_hist and len(conv_hist['error']) > 0:
+            axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'],
+                               styles[i % len(styles)], label=f'res={res}')
+    except Exception:
+        pass
+
+axs[1, 1].set_title('Convergence history')
+axs[1, 1].set_xlabel('Iteration')
+axs[1, 1].set_ylabel('Relative error')
+axs[1, 1].legend()
+axs[1, 1].grid(True)
+axs[1, 2].axis('off')
+
+plt.tight_layout()
+
+# ------------------------------------------------------------------
+# Difference plots vs finest resolution, on common grid
+# ------------------------------------------------------------------
+ref_idx   = -1   # finest resolution is the reference
+ref_label = f'res={res_lst[ref_idx]}'
+
+diff_specs = [
+    ('Gamma', r'$\Gamma$',  r'Circulation'),
+    ('a',     r'$a$',       r'Axial induction factor'),
+    ('aline', r"$a'$",      r'Tangential induction factor'),
+    ('Fnorm', r'$F_{norm}$',r'Normal force'),
+    ('Ftan',  r'$F_{tan}$', r'Tangential force'),
 ]
 
-for key, data_lst, label, title, ylabel in diff_pairs:
-    y_ref = y_ref_arrays[key]
-    fig = plt.figure()
-    ax  = fig.subplots(1, 1)
-    for j in range(len(res_lst) - 1):
-        sc_j  = len(r_control_lst[j])
-        r_j   = np.asarray(r_control_lst[j])[1:]
-        y_j   = extract(data_lst[j], sc_j)
-        y_j_interp = np.interp(r_ref, r_j, y_j)
-        diff = abs((y_ref - y_j_interp) / y_ref) * 100
-        ax.plot(r_ref, diff, '-o', label=f'{label} (res={res_lst[j]})')
-    finish_axis(ax, title, ylabel)
+fig2, axs2 = plt.subplots(2, 3, figsize=(15, 8))
+fig2.suptitle(f'Percentage difference vs {ref_label} — evaluated on common reference grid')
+axs2_flat = axs2.flatten()
 
+for ax_idx, (key, sym, name) in enumerate(diff_specs):
+    ax = axs2_flat[ax_idx]
+    y_ref = interp[key][ref_idx]
+    for i in range(len(res_lst) - 1):
+        y_i  = interp[key][i]
+        # Avoid division by zero: use absolute ref value; mask near-zero
+        denom = np.where(np.abs(y_ref) > 1e-10, np.abs(y_ref), np.nan)
+        diff  = np.abs(y_ref - y_i) / denom * 100
+        ax.plot(r_ref, diff, styles[i % len(styles)], label=f'res={res_lst[i]} vs {ref_label}')
+    finish_axis(ax, f'{name} difference', f'|Δ{sym}| (%)')
+
+axs2_flat[-1].axis('off')
 plt.tight_layout()
 plt.show()
