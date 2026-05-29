@@ -7,17 +7,18 @@ from plotter import plot
 
 class BEM:
     
-    def __init__(self, J):
+    def __init__(self, J, radius, n_blades, U_inf):
         
         # Rotor specs (absolute values)
-        self.radius = 0.7  # meters
-        self.n_blades = 6
+        self.radius = radius  # meters
+        self.n_blades = n_blades
         self.blade_start_fraction = 0.25  # Fraction of radius (0-1)
         self.collective_blade_pitch = 46  # degrees
         self.collective_blade_pitch_location = 0.7  # Fraction of radius (0-1)
         
         # Operational specs
-        self.U_inf = 60  # m/s
+        self.U_inf = U_inf  # m/s
+        self.J = J
         self.rpm = 60 * (self.U_inf / (J * 2 * self.radius))
         self.altitude = 2000  # meters
         self.incidence = 0
@@ -250,13 +251,13 @@ class BEM:
         r_stations_norm = np.insert(r_stations_norm, 0, 0)
         self.r_stations_abs = r_stations_norm * self.radius
         self.dr =  np.diff(self.r_stations_abs)
-        r_control_abs = self.r_stations_abs[:-1] + self.dr/2
+        r_control_abs = self.r_stations_abs#[:-1] + self.dr/2
         r_control_norm = r_control_abs/self.radius
 
         twist_stations = []
         chord_norm_stations = []
         for r_norm in r_control_norm:
-            if r_norm > self.blade_start_fraction:
+            if r_norm >= self.blade_start_fraction:
                 twist_stations.append(-50 * r_norm + 35 + self.collective_blade_pitch + self.collective_blade_pitch_location * 50 - 35 )
                 chord_norm_stations.append(0.18 - 0.06 * r_norm)
             else:
@@ -277,31 +278,64 @@ class BEM:
 
             for blade in range(self.n_blades):
                 angle_rotation=2*np.pi/self.n_blades*blade
-                for i in range(len(r_control_abs)):
+                for i in range(len(r_control_abs)-1):
                     r_in=self.r_stations_abs[i]
                     r_out=self.r_stations_abs[i+1]
                     r_mid=r_control_abs[i]
-                    cp=rot_yz([0,0,r_mid],angle_rotation)
+                    cp=rot_yz([0,r_mid, 0],angle_rotation)
                     controlpoints.append(cp)
                     panels.append(i)
 
                     filaments=[]
-                    filaments.append((rot_yz([0,0,r_in],angle_rotation),rot_yz([0,0,r_out],angle_rotation)))
+                    filaments.append((rot_yz([0,r_in, 0],angle_rotation),rot_yz([0,r_out, 0],angle_rotation)))
 
-                    old=rot_yz([0,0,r_out],angle_rotation)
-                    for j in range(len(theta_array)-1):
-                        th=theta_array[j+1]
-                        t_cur = self.tlst[j+1]
-                        new=rot_yz([t_cur*self.U_inf*(1+a_ind_wake), r_out*np.sin(-th), r_out*np.cos(-th)],angle_rotation)
-                        filaments.append((old,new))
-                        old=new
+                    chord_in = chord_norm_stations[i] * self.radius
+                    twist_in = twist_stations[i]
+                    twist_in_rad = np.radians(twist_in)
+                    x_te_in = chord_in * np.sin(-twist_in_rad)
+                    z_te_in = -chord_in * np.cos(twist_in_rad)
+                    filaments.append((rot_yz([x_te_in, r_in, z_te_in], angle_rotation), rot_yz([0, r_in, 0], angle_rotation)))
 
-                    helix=[]
-                    for j in range(len(theta_array)):
-                        th=theta_array[j]
-                        helix.append(rot_yz([wake_pitch*th, r_in*np.sin(-th), r_in*np.cos(-th)],angle_rotation))
-                    for j in range(len(helix)-1,0,-1):
-                        filaments.append((helix[j],helix[j-1]))
+                    for j in range(len(theta_array) - 1):
+                        xt = filaments[-1][0][0]; yt = filaments[-1][0][1]; zt = filaments[-1][0][2]
+                        dy = (np.cos(-theta_array[j+1]) - np.cos(-theta_array[j])) * r_in
+                        dz = (np.sin(-theta_array[j+1]) - np.sin(-theta_array[j])) * r_in
+                        dx = (theta_array[j+1] - theta_array[j]) *self.J * self.radius
+                        dx, dy, dz = rot_yz([dx, dy, dz], angle_rotation)
+                        filaments.append((np.array([xt+dx, yt+dy, zt+dz]), np.array([xt, yt, zt])))
+
+
+                    chord_out = chord_norm_stations[i+1] * self.radius
+                    twist_out = twist_stations[i+1]
+                    twist_out_rad = np.radians(twist_out)
+                    x_te_out = chord_out * np.sin(-twist_out_rad)
+                    z_te_out = -chord_out * np.cos(twist_out_rad)
+                    filaments.append((rot_yz([0, r_out, 0], angle_rotation), rot_yz([x_te_out, r_out, z_te_out], angle_rotation)))
+
+                    for j in range(len(theta_array) - 1):
+                        xt = filaments[-1][1][0]; yt = filaments[-1][1][1]; zt = filaments[-1][1][2]
+                        dy = (np.cos(-theta_array[j+1]) - np.cos(-theta_array[j])) * r_out
+                        dz = (np.sin(-theta_array[j+1]) - np.sin(-theta_array[j])) * r_out
+                        dx = (theta_array[j+1] - theta_array[j]) * self.J * self.radius
+                        dx, dy, dz = rot_yz([dx, dy, dz], angle_rotation)
+                        filaments.append((np.array([xt, yt, zt]), np.array([xt+dx, yt+dy, zt+dz])))
+
+
+
+                    # old=rot_yz([0,0,r_out],angle_rotation)
+                    # for j in range(len(theta_array)-1):
+                    #     th=theta_array[j+1]
+                    #     t_cur = self.tlst[j+1]
+                    #     new=rot_yz([t_cur*self.U_inf*(1+a_ind_wake), r_out*np.sin(-th), r_out*np.cos(-th)],angle_rotation)
+                    #     filaments.append((old,new))
+                    #     old=new
+
+                    # helix=[]
+                    # for j in range(len(theta_array)):
+                    #     th=theta_array[j]
+                    #     helix.append(rot_yz([wake_pitch*th, r_in*np.sin(-th), r_in*np.cos(-th)],angle_rotation))
+                    # for j in range(len(helix)-1,0,-1):
+                    #     filaments.append((helix[j],helix[j-1]))
 
                     filament_rings.append(filaments)
 
@@ -316,6 +350,7 @@ class BEM:
             try:
                 fig3 = plt.figure()
                 ax3 = fig3.add_subplot(projection='3d')
+                ax3.set_proj_type('ortho')
                 cps = np.array(controlpoints)
                 if cps.size:
                     ax3.scatter(cps[:, 0], cps[:, 1], cps[:, 2], c='r', marker='o', label='control points')
@@ -326,7 +361,7 @@ class BEM:
                         xs = [P1[0], P2[0]]
                         ys = [P1[1], P2[1]]
                         zs = [P1[2], P2[2]]
-                        ax3.scatter(xs, ys, zs, c='b', marker='.', s=10)  # smaller blue dots for filaments
+                        ax3.plot(xs, ys, zs, c='b', marker='.')  # smaller blue dots for filaments
 
                 ax3.set_title('Control points and filament rings')
                 ax3.set_xlabel('X')
@@ -418,7 +453,7 @@ class BEM:
         if error>=tolerance:
             print("Warning: Lifting line did not converge but it did stop")
 
-        return a_temp, aline_temp, Fnorm_temp, Ftan_temp, GammaNew, converged_iter, self.convergence_history, r_control_abs, alpha_temp
+        return a_temp, aline_temp, Fnorm_temp, Ftan_temp, GammaNew, converged_iter, self.convergence_history, r_control_abs[1:] + self.dr/2, alpha_temp
 
         
 
@@ -641,13 +676,12 @@ class BEM:
 
 if __name__ == "__main__":
     
-    bem = BEM(J=2)
+    bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
-    tend=5
+    tend=1
     dt=0.1
     bem.tlst=np.arange(0,tend,dt)
     # Uwake=10
-    bem.rpm=40
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
     output = bem.Lifting_line(resolution=10, track_convergence=True)
 
@@ -655,7 +689,7 @@ if __name__ == "__main__":
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
 
     blade_count = bem.n_blades
-    station_count = len(r_control)
+    station_count = len(r_control) + 1
 
     r_l = r_control[1:]
 
@@ -679,8 +713,8 @@ if __name__ == "__main__":
         # remove r_index == 0 control points
         x_masked = x_values[1:]
 
-        if station_count > 0 and len(y_values) == blade_count * station_count:
-            blade_series = [np.asarray(y_values[i * station_count:(i + 1) * station_count])[1:] for i in range(blade_count)]
+        if station_count > 0 and len(y_values) == blade_count * (station_count - 1):
+            blade_series = [np.asarray(y_values[i * (station_count - 1):(i + 1) * (station_count - 1)])[1:] for i in range(blade_count)]
             # if all blades identical, plot a single line
             if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
                 ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
