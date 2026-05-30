@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Lifting_line import BEM
 
 a_ind_wake_lst=np.array([0,0])  #np.linspace(0,1,10)
-res=20
+res=200
 # bem=BEM(2)
 i=0
 bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)

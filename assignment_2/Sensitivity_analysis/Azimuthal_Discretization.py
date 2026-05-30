@@ -5,11 +5,13 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Lifting_line import BEM
-
-res_lst = np.array([10,40,80,200])
+# data_cos=np.loadtxt('assignment_2\\Sensitivity_analysis\\Finest_grid_cosine.txt')
+# print(len(data_cos[0,:]))
+res_lst = np.array([400])
 bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)
 # omega=bem.rpm/60*2*np.pi
 # tend=2*np.pi/omega*rev
+spacing='cosine'
 tend = 10/60
 dt = 0.1
 bem.tlst = np.arange(0, tend, dt)
@@ -25,7 +27,7 @@ alpha_out_lst = []
 conv_hist_lst = []
 
 for res in res_lst:
-    output = bem.Lifting_line(resolution=res, track_convergence=True)
+    output = bem.Lifting_line(resolution=res, track_convergence=True,spacing=spacing)
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
 
     a_out_lst.append(a_out)
@@ -94,9 +96,17 @@ for title, data_lst, ylabel, key in plot_specs:
 
     plt.tight_layout()
 data=np.loadtxt('assignment_2\\Sensitivity_analysis\\Finest_grid.txt')
+data_cos=np.loadtxt('assignment_2\\Sensitivity_analysis\\Finest_grid_cosine.txt')
 
-if len(data[0,:])<res_lst[-1]:
-    np.savetxt('assignment_2\\Sensitivity_analysis\\Finest_grid.txt',np.array([r_control_lst[-1][1:],Gamma_out_lst[-1][1:res_lst[-1]+1],Fnorm_out_lst[-1][1:res_lst[-1]+1],Ftan_out_lst[-1][1:res_lst[-1]+1],aline_out_lst[-1][1:res_lst[-1]+1],a_out_lst[-1][1:res_lst[-1]+1],alpha_out_lst[-1][1:res_lst[-1]+1]]), header='rcontrol gamma ftan fnorm aprime a alpha')
+
+if spacing=='linear':
+    if len(data[0,:])<res_lst[-1]:
+        np.savetxt('assignment_2\\Sensitivity_analysis\\Finest_grid.txt',np.array([r_control_lst[-1][1:],Gamma_out_lst[-1][1:res_lst[-1]+1],Fnorm_out_lst[-1][1:res_lst[-1]+1],Ftan_out_lst[-1][1:res_lst[-1]+1],aline_out_lst[-1][1:res_lst[-1]+1],a_out_lst[-1][1:res_lst[-1]+1],alpha_out_lst[-1][1:res_lst[-1]+1]]), header='rcontrol gamma ftan fnorm aprime a alpha')
+if spacing=='cosine':
+    if len(data_cos[0,:])<res_lst[-1]:
+        np.savetxt('assignment_2\\Sensitivity_analysis\\Finest_grid_cosine.txt',np.array([r_control_lst[-1][1:],Gamma_out_lst[-1][1:res_lst[-1]+1],Fnorm_out_lst[-1][1:res_lst[-1]+1],Ftan_out_lst[-1][1:res_lst[-1]+1],aline_out_lst[-1][1:res_lst[-1]+1],a_out_lst[-1][1:res_lst[-1]+1],alpha_out_lst[-1][1:res_lst[-1]+1]]), header='rcontrol gamma ftan fnorm aprime a alpha')
+
+
 # data=np.loadtxt('assignment_2\\Sensitivity_analysis\\Finest_grid.txt')
 # print(data[0,:])
 # def interp_to_ref(arr, r_control):
