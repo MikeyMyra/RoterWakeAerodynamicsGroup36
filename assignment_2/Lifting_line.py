@@ -300,7 +300,7 @@ class BEM:
                         xt = filaments[-1][0][0]; yt = filaments[-1][0][1]; zt = filaments[-1][0][2]
                         dy = (np.cos(-theta_array[j+1]) - np.cos(-theta_array[j])) * r_in
                         dz = (np.sin(-theta_array[j+1]) - np.sin(-theta_array[j])) * r_in
-                        dx = (theta_array[j+1] - theta_array[j]) *self.J * self.radius*(1+a_ind_wake)
+                        dx = (theta_array[j+1] - theta_array[j]) / (np.pi / (self.radius * self.J))*(1+a_ind_wake)
                         dx, dy, dz = rot_yz([dx, dy, dz], angle_rotation)
                         filaments.append((np.array([xt+dx, yt+dy, zt+dz]), np.array([xt, yt, zt])))
 
@@ -316,7 +316,7 @@ class BEM:
                         xt = filaments[-1][1][0]; yt = filaments[-1][1][1]; zt = filaments[-1][1][2]
                         dy = (np.cos(-theta_array[j+1]) - np.cos(-theta_array[j])) * r_out
                         dz = (np.sin(-theta_array[j+1]) - np.sin(-theta_array[j])) * r_out
-                        dx = (theta_array[j+1] - theta_array[j]) * self.J * self.radius*(1+a_ind_wake)
+                        dx = (theta_array[j+1] - theta_array[j]) / (np.pi / (self.radius * self.J))*(1+a_ind_wake)
                         dx, dy, dz = rot_yz([dx, dy, dz], angle_rotation)
                         filaments.append((np.array([xt, yt, zt]), np.array([xt+dx, yt+dy, zt+dz])))
 
@@ -683,7 +683,7 @@ if __name__ == "__main__":
     bem.tlst=np.arange(0,tend,dt)
     # Uwake=10
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=10, track_convergence=True)
+    output = bem.Lifting_line(resolution=20, track_convergence=True)
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
