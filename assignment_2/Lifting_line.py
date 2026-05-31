@@ -434,7 +434,7 @@ class BEM:
 
                 a_temp[icp] = (-u_ind[icp] + vrot[0]) / (self.U_inf + 1e-12)
                 alpha_temp[icp] = np.rad2deg(theta_rad - phi)
-                phi_temp[icp] = phi
+                phi_temp[icp] = np.rad2deg(phi)
                 aline_temp[icp] = (vazim/(radialposition*self.omega) - 1)
                 Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.sin(phi)
                 Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.cos(phi)
@@ -756,13 +756,13 @@ if __name__ == "__main__":
 
     # Circulation
     try:
-        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma')
-        finish_axis(axs[0, 0], 'Circulation vs radius', 'Gamma (m^2/s)')
+        plot_blade_overlay(axs[0, 0], r_control, Gamma_out * bem.n_blades * np.pi * bem.omega / bem.U_inf**2, 'Gamma')
+        finish_axis(axs[0, 0], 'Nondimensional Circulation vs radius', r'$\frac{\Gamma N_\text{blades} \pi \Omega}{U_\infty^2}$')
         # overlay BEM circulation
         if compare_with_bem:
             try:
                 if bem_r_abs is not None and len(bem.circulation_list) > 0:
-                    axs[0, 0].plot(bem_r_abs, bem.circulation_list, '--k', label='BEM')
+                    axs[0, 0].plot(bem_r_abs, np.array(bem.circulation_list) * bem.n_blades * np.pi * bem.omega / bem.U_inf**2, '--k', label='BEM')
                     axs[0, 0].legend()
             except Exception:
                 pass
@@ -789,16 +789,16 @@ if __name__ == "__main__":
 
     # Forces
     try:
-        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out/(0.5 * bem.rho *(bem.rpm/60)**2 * (bem.radius*2)**3), 'Fnorm')
-        plot_blade_overlay(axs[1, 0], r_control, Ftan_out/(0.5 * bem.rho *(bem.rpm/60)**2 * (bem.radius*2)**3), 'Ftan', style='-s')
-        finish_axis(axs[1, 0], 'Section forces', r'Force per unit span coefficient $ C_F = \frac{1}{\rho n^2 D^3}\frac{dF}{dr}$')
+        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out/(0.5 * bem.rho * bem.U_inf**2 * bem.radius), 'Fnorm')
+        plot_blade_overlay(axs[1, 0], r_control, Ftan_out/(0.5 * bem.rho * bem.U_inf**2 * bem.radius), 'Ftan', style='-s')
+        finish_axis(axs[1, 0], 'Section forces', r'Force per unit span coefficient $ C_F = \frac{1}{\frac{1}{2} \rho U_\infty^2 R}\frac{dF}{dr}$')
         # overlay BEM forces
         if compare_with_bem:
             try:
                 if bem_r_abs is not None and len(bem.F_axial_list) > 0:
-                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_axial_list)/(0.5 * bem.rho *(bem.rpm/60)**2 * (bem.radius*2)**3), '--k', label='BEM F_axial')
+                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_axial_list)/(0.5 * bem.rho * bem.U_inf**2 * bem.radius), '--k', label='BEM F_axial')
                 if bem_r_abs is not None and len(bem.F_azimuth_list) > 0:
-                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_azimuth_list)/(0.5 * bem.rho *(bem.rpm/60)**2 * (bem.radius*2)**3), ':k', label='BEM F_azimuth')
+                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_azimuth_list)/(0.5 * bem.rho * bem.U_inf**2 * bem.radius), ':k', label='BEM F_azimuth')
                 axs[1, 0].legend()
             except Exception as e:
                 print(e)
