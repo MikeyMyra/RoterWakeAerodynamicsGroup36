@@ -8,11 +8,11 @@ from Lifting_line import BEM
 
 # tend_lst=np.array([5,10,20])  #np.linspace(0,1,10)
 xend_lst=np.array([5,50,100])  #np.linspace(0,1,10)
-rev_lst=np.array([0.1,0.5, 1.0,2,5])
+rev_lst=np.array([2,5,10,50,200])
 res=10
 i=0
-bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)
-
+bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
+print(bem.rpm)
 a_out_lst=[]
 aline_out_lst=[]
 Fnorm_out_lst=[]
@@ -26,17 +26,17 @@ alpha_out_lst=[]
 for rev in rev_lst:
 
     dt=0.1
-    bem.rpm=40
+    # bem.rpm=40
     omega=bem.rpm/60*2*np.pi
     tend=2*np.pi/omega*rev
 
     bem.tlst=np.arange(0,tend,dt)
-    bem.rpm=40
+    # bem.rpm=40
 
     output = bem.Lifting_line(resolution=res, track_convergence=True, spacing='cosine')
 
     # Unpack outputs
-    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
+    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
 
     a_out_lst.append(a_out)
     aline_out_lst.append(aline_out)

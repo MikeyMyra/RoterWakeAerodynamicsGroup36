@@ -7,16 +7,16 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Lifting_line import BEM
 
 a_ind_wake_lst=np.array([0,0])  #np.linspace(0,1,10)
-res=200
+res=20
 # bem=BEM(2)
 i=0
-bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)
+bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
-tend=5/60
+tend=10/60
 dt=0.1
 bem.tlst=np.arange(0,tend,dt)
 # Uwake=10
-bem.rpm=40
+# bem.rpm=40
 results={}
 for a_ind_wake in a_ind_wake_lst:
     if i == 0:
@@ -26,7 +26,7 @@ for a_ind_wake in a_ind_wake_lst:
         output = bem.Lifting_line(resolution=res, a_ind_wake=a_ind_wake, track_convergence=True, spacing='cosine')
         key = 'cosine'
 
-    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
+    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
 
     # store immediately after unpacking
     results[key] = {

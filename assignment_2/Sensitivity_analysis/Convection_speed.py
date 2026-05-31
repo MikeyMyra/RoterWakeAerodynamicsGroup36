@@ -9,12 +9,12 @@ from Lifting_line import BEM
 a_ind_wake_lst=np.array([0,0.5,1])  #np.linspace(0,1,10)
 res=20
 i=0
-bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)
+bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 tend=5
 dt=0.1
 bem.tlst=np.arange(0,tend,dt)
 # Uwake=10
-bem.rpm=40
+# bem.rpm=40
 a_out_lst=[]
 aline_out_lst=[]
 Fnorm_out_lst=[]
@@ -31,7 +31,8 @@ for a_ind_wake in a_ind_wake_lst:
     output = bem.Lifting_line(resolution=res,a_ind_wake=a_ind_wake, track_convergence=True)
 
     # Unpack outputs
-    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
+    # a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
+    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
     a_out_lst.append(a_out)
     aline_out_lst.append(aline_out)
     Fnorm_out_lst.append(Fnorm_out)
