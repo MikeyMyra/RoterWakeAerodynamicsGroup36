@@ -8,7 +8,7 @@ from Lifting_line import BEM
 
 # tend_lst=np.array([5,10,20])  #np.linspace(0,1,10)
 xend_lst=np.array([5,50,100])  #np.linspace(0,1,10)
-rev_lst=np.array([0.1, 0.5, 1.0])
+rev_lst=np.array([0.1,0.5, 1.0,2,5])
 res=10
 i=0
 bem = BEM(J=2, radius=0.7, n_blades=6, U_inf=60)
@@ -53,22 +53,21 @@ for rev in rev_lst:
 
     if i==0:
         def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
+
             x_values = np.asarray(x_values)
             y_values = np.asarray(y_values)
 
-            # remove r_index == 0 control points
             x_masked = x_values[1:]
 
             if station_count > 0 and len(y_values) == blade_count * station_count:
-                blade_series = [np.asarray(y_values[i * station_count:(i + 1) * station_count])[1:] for i in range(blade_count)]
-                if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
-                    ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
-                    ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
-                            va='top', ha='left', fontsize=9)
-                else:
-                    for blade_idx, series in enumerate(blade_series, start=1):
-                        ax.plot(x_masked, series, style, label=f'{label_prefix} blade {blade_idx}')
+
+                blade0 = np.asarray(y_values[:station_count])[1:]
+
+                ax.plot(x_masked, blade0, style, label=label_prefix)
+
             else:
+
+                ax.plot(x_masked, y_values[1:], style, label=label_prefix)
                 ax.plot(x_masked, y_values[1:], style, label=label_prefix)
 
         def finish_axis(ax, title, ylabel):
@@ -87,34 +86,34 @@ for rev in rev_lst:
 
         # Circulation
         try:
-            plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma'r'$\,(n_rev$'f'={rev})')
+            plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma'r'$\,(n_{rev}$'f'={rev})')
         except Exception:
             pass
 
         # Axial and azimuthal induction
         try:
-            plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,(n_rev$'f'={rev})')
-            plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,(n_rev$'f'={rev})', style='-s')
+            plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,(n_{rev}$'f'={rev})')
+            plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,(n_{rev}$'f'={rev})', style='-s')
         except Exception:
             pass
 
         # Forces
         try:
-            plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}\,(n_rev$'f'={rev})')
-            plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,(n_rev$'f'={rev})', style='-s')
+            plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}\,(n_{rev}$'f'={rev})')
+            plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,(n_{rev}$'f'={rev})', style='-s')
         except Exception:
             pass
 
         # Angle of attack
         try:
-            plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,(n_rev$'f'={rev})', style='-^')
+            plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,(n_{rev}$'f'={rev})', style='-^')
         except Exception:
             pass
 
         # Convergence history
         try:
             if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
-                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'], label=r'$\epsilon\,(n_rev$'f'={rev})')
+                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'], label=r'$\epsilon\,(n_{rev}$'f'={rev})')
                 axs[1, 1].grid(True)
             else:
                 axs[1, 1].axis('off')
@@ -122,19 +121,19 @@ for rev in rev_lst:
             axs[1, 1].axis('off')
 
     else:
-        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma' r'$\,(n_rev$'f'={rev})')
+        plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma' r'$\,(n_{rev}$'f'={rev})')
 
-        plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,(n_rev$'f'={rev})')
-        plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,(n_rev$'f'={rev})', style='-s')
+        plot_blade_overlay(axs[0, 1], r_control, a_out, r'$a\,(n_{rev}$'f'={rev})')
+        plot_blade_overlay(axs[0, 1], r_control, aline_out, r'$a^\prime\,(n_{rev}$'f'={rev})', style='-s')
 
-        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}\,(n_rev$'f'={rev})')
-        plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,(n_rev$'f'={rev})', style='-s')
+        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, r'$ F_{norm}\,(n_{rev}$'f'={rev})')
+        plot_blade_overlay(axs[1, 0], r_control, Ftan_out, r'$ F_{tan}\,(n_{rev}$'f'={rev})', style='-s')
 
-        plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,(n_rev$'f'={rev})', style='-^')
+        plot_blade_overlay(axs[0, 2], r_control, alpha_out, r'$AoA\,(n_{rev}$'f'={rev})', style='-^')
 
         try:
             if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
-                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'], label=r'$\epsilon\,(n_rev$'f'={rev})')
+                axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'], label=r'$\epsilon\,(n_{rev}$'f'={rev})')
                 axs[1, 1].grid(True)
             else:
                 axs[1, 1].axis('off')
@@ -158,50 +157,50 @@ fig = plt.figure()
 ax = fig.subplots(1, 1)
 for i in range(len(rev_lst) - 1):
     plot_blade_overlay(ax, r_control,
-                       abs((Gamma_out_lst[0] - Gamma_out_lst[i + 1]) / Gamma_out_lst[0]) * 100,
-                       r'$\Gamma\,(n_rev=$' f'{rev_lst[i + 1]})')
+                       abs((Gamma_out_lst[-1] - Gamma_out_lst[i]) / Gamma_out_lst[-1]) * 100,
+                       r'$\Gamma\,(n_{rev}=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Circulation difference vs radius compared to $n_{rev}=$' f'{rev_lst[0]}',
+            r'Circulation difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
             r'$|\Delta\Gamma|$ (%)')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
 for i in range(len(rev_lst) - 1):
     plot_blade_overlay(ax, r_control,
-                       abs((a_out_lst[0] - a_out_lst[i + 1]) / a_out_lst[0]) * 100,
-                       r'$a\,(n_rev=$' f'{rev_lst[i + 1]})')
+                       abs((a_out_lst[-1] - a_out_lst[i]) / a_out_lst[-1]) * 100,
+                       r'$a\,(n_{rev}=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Axial induction factor difference vs radius compared to $n_{rev}=$' f'{rev_lst[0]}',
+            r'Axial induction factor difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
             r'$|\Delta a|$ (%)')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
 for i in range(len(rev_lst) - 1):
     plot_blade_overlay(ax, r_control,
-                       abs((aline_out_lst[0] - aline_out_lst[i + 1]) / aline_out_lst[0]) * 100,
-                       r'$a^\prime\,(n_rev=$' f'{rev_lst[i + 1]})')
+                       abs((aline_out_lst[-1] - aline_out_lst[i]) / aline_out_lst[-1]) * 100,
+                       r'$a^\prime\,(n_{rev}=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Tangential induction factor difference vs radius compared to $n_{rev}=$' f'{rev_lst[0]}',
+            r'Tangential induction factor difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
             r'$|\Delta a^\prime|$ (%)')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
 for i in range(len(rev_lst) - 1):
     plot_blade_overlay(ax, r_control,
-                       abs((Fnorm_out_lst[0] - Fnorm_out_lst[i + 1]) / Fnorm_out_lst[0]) * 100,
-                       r'$F_{norm}\,(n_rev=$' f'{rev_lst[i + 1]})')
+                       abs((Fnorm_out_lst[-1] - Fnorm_out_lst[i]) / Fnorm_out_lst[-1]) * 100,
+                       r'$F_{norm}\,(n_{rev}=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Normal force difference vs radius compared to $n_{rev}=$' f'{rev_lst[0]}',
+            r'Normal force difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
             r'$|\Delta F_{norm}|$ (%)')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
 for i in range(len(rev_lst) - 1):
     plot_blade_overlay(ax, r_control,
-                       abs((Ftan_out_lst[0] - Ftan_out_lst[i + 1]) / Ftan_out_lst[0]) * 100,
-                       r'$F_{tan}\,(n_rev=$' f'{rev_lst[i + 1]})')
+                       abs((Ftan_out_lst[-1] - Ftan_out_lst[i]) / Ftan_out_lst[-1]) * 100,
+                       r'$F_{tan}\,(n_{rev}=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Tangential force difference vs radius compared to $n_{rev}=$' f'{rev_lst[0]}',
+            r'Tangential force difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
             r'$|\Delta F_{tan}|$ (%)')
 
 

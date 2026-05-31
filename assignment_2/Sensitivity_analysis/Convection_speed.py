@@ -28,7 +28,7 @@ for a_ind_wake in a_ind_wake_lst:
     # bem.Lifting_line(20,a_ind_wake)
     
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=10,a_ind_wake=a_ind_wake, track_convergence=True)
+    output = bem.Lifting_line(resolution=res,a_ind_wake=a_ind_wake, track_convergence=True)
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
@@ -48,21 +48,20 @@ for a_ind_wake in a_ind_wake_lst:
 
 
     if i==0:
+
         def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
             x_values = np.asarray(x_values)
             y_values = np.asarray(y_values)
 
-            # remove r_index == 0 control points
             x_masked = x_values[1:]
 
             if station_count > 0 and len(y_values) == blade_count * station_count:
                 blade_series = [np.asarray(y_values[i * station_count:(i + 1) * station_count])[1:] for i in range(blade_count)]
-                # if all blades identical, plot a single line
                 if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
-                    ax.plot(x_masked, blade_series[0], style,label=f'{label_prefix}')
+                    ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix}')
                 else:
-                    for blade_idx, series in enumerate(blade_series, start=1):
-                        ax.plot(x_masked, series, style,label=f'{label_prefix}')
+                    combined = np.mean(blade_series, axis=0)
+                    ax.plot(x_masked, combined, style, label=f'{label_prefix}')
             else:
                 ax.plot(x_masked, y_values[1:], style, label=label_prefix)
 
