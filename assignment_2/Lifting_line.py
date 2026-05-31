@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from plotter import plot
+#use latex:
+#plt.rcParams['text.usetex'] = True
 
 
 class BEM:
@@ -395,6 +397,7 @@ class BEM:
 
             a_temp = np.zeros(n_cp)
             alpha_temp = np.zeros(n_cp)
+            phi_temp = np.zeros(n_cp)
             aline_temp = np.zeros(n_cp)
             Fnorm_temp = np.zeros(n_cp)
             Ftan_temp = np.zeros(n_cp)
@@ -431,6 +434,7 @@ class BEM:
 
                 a_temp[icp] = (-u_ind[icp] + vrot[0]) / (self.U_inf + 1e-12)
                 alpha_temp[icp] = np.rad2deg(theta_rad - phi)
+                phi_temp[icp] = phi
                 aline_temp[icp] = (vazim/(radialposition*self.omega) - 1)
                 Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.sin(phi)
                 Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.cos(phi)
@@ -453,7 +457,7 @@ class BEM:
         if error>=tolerance:
             print("Warning: Lifting line did not converge but it did stop")
 
-        return a_temp, aline_temp, Fnorm_temp, Ftan_temp, GammaNew, converged_iter, self.convergence_history, r_control_abs[1:] + self.dr/2, alpha_temp
+        return a_temp, aline_temp, Fnorm_temp, Ftan_temp, GammaNew, converged_iter, self.convergence_history, r_control_abs[1:] + self.dr/2, alpha_temp, phi_temp
 
         
 
@@ -683,13 +687,14 @@ if __name__ == "__main__":
     bem.tlst=np.arange(0,tend,dt)
     # Uwake=10
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=20, track_convergence=True)
+    output = bem.Lifting_line(resolution=80, track_convergence=True, spacing='cosine')
 
     # Unpack outputs
-    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out = output
+    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
 
     blade_count = bem.n_blades
     station_count = len(r_control) + 1
+    compare_with_bem = False
 
     r_l = r_control[1:]
 
@@ -740,9 +745,11 @@ if __name__ == "__main__":
         ax.grid(True)
 
     # Plot results
-    # run BEM blade-element solver for comparison
-    bem.blade_element(resolution=100, use_prandtl=False)
-    bem_r_abs = np.array(bem.r_R_list) * bem.radius
+    bem_r_abs = None
+    if compare_with_bem:
+        # run BEM blade-element solver for comparison
+        bem.blade_element(resolution=100, use_prandtl=False)
+        bem_r_abs = np.array(bem.r_R_list) * bem.radius
 
 
     fig, axs = plt.subplots(2, 3, figsize=(15, 8))
@@ -752,12 +759,13 @@ if __name__ == "__main__":
         plot_blade_overlay(axs[0, 0], r_control, Gamma_out, 'Gamma')
         finish_axis(axs[0, 0], 'Circulation vs radius', 'Gamma (m^2/s)')
         # overlay BEM circulation
-        try:
-            if bem_r_abs is not None and len(bem.circulation_list) > 0:
-                axs[0, 0].plot(bem_r_abs, bem.circulation_list, '--k', label='BEM')
-                axs[0, 0].legend()
-        except Exception:
-            pass
+        if compare_with_bem:
+            try:
+                if bem_r_abs is not None and len(bem.circulation_list) > 0:
+                    axs[0, 0].plot(bem_r_abs, bem.circulation_list, '--k', label='BEM')
+                    axs[0, 0].legend()
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -767,45 +775,52 @@ if __name__ == "__main__":
         plot_blade_overlay(axs[0, 1], r_control, aline_out, "a'", style='-s')
         finish_axis(axs[0, 1], 'Induction factors', 'Induction factor')
         # overlay BEM induction
-        try:
-            if bem_r_abs is not None and len(bem.a_list) > 0:
-                axs[0, 1].plot(bem_r_abs, bem.a_list, '--k', label='BEM a')
-            if bem_r_abs is not None and len(bem.a_prime_list) > 0:
-                axs[0, 1].plot(bem_r_abs, bem.a_prime_list, ':k', label="BEM a'")
-            axs[0, 1].legend()
-        except Exception:
-            pass
+        if compare_with_bem:
+            try:
+                if bem_r_abs is not None and len(bem.a_list) > 0:
+                    axs[0, 1].plot(bem_r_abs, bem.a_list, '--k', label='BEM a')
+                if bem_r_abs is not None and len(bem.a_prime_list) > 0:
+                    axs[0, 1].plot(bem_r_abs, bem.a_prime_list, ':k', label="BEM a'")
+                axs[0, 1].legend()
+            except Exception:
+                pass
     except Exception:
         pass
 
     # Forces
     try:
-        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out, 'Fnorm')
-        plot_blade_overlay(axs[1, 0], r_control, Ftan_out, 'Ftan', style='-s')
-        finish_axis(axs[1, 0], 'Section forces', 'Force per unit span')
+        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out/(0.5 * bem.rho *(bem.rpm/60)**2 * (bem.radius*2)**3), 'Fnorm')
+        plot_blade_overlay(axs[1, 0], r_control, Ftan_out/(0.5 * bem.rho *(bem.rpm/60)**2 * (bem.radius*2)**3), 'Ftan', style='-s')
+        finish_axis(axs[1, 0], 'Section forces', r'Force per unit span coefficient $ C_F = \frac{1}{\rho n^2 D^3}\frac{dF}{dr}$')
         # overlay BEM forces
-        try:
-            if bem_r_abs is not None and len(bem.F_axial_list) > 0:
-                axs[1, 0].plot(bem_r_abs, bem.F_axial_list, '--k', label='BEM F_axial')
-            if bem_r_abs is not None and len(bem.F_azimuth_list) > 0:
-                axs[1, 0].plot(bem_r_abs, bem.F_azimuth_list, ':k', label='BEM F_azimuth')
-            axs[1, 0].legend()
-        except Exception:
-            pass
-    except Exception:
+        if compare_with_bem:
+            try:
+                if bem_r_abs is not None and len(bem.F_axial_list) > 0:
+                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_axial_list)/(0.5 * bem.rho *(bem.rpm/60)**2 * (bem.radius*2)**3), '--k', label='BEM F_axial')
+                if bem_r_abs is not None and len(bem.F_azimuth_list) > 0:
+                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_azimuth_list)/(0.5 * bem.rho *(bem.rpm/60)**2 * (bem.radius*2)**3), ':k', label='BEM F_azimuth')
+                axs[1, 0].legend()
+            except Exception as e:
+                print(e)
+                pass
+    except Exception as e:
+        print(e)
         pass
 
     # Angle of attack
     try:
         plot_blade_overlay(axs[0, 2], r_control, alpha_out, 'AoA', style='-^')
+        plot_blade_overlay(axs[0, 2], r_control, phi_out, 'Flow angle', style='-s')
         # overlay BEM AoA
-        try:
-            if bem_r_abs is not None and len(bem.alpha_list) > 0:
-                axs[0, 2].plot(bem_r_abs, bem.alpha_list, '--k', label='BEM AoA')
-                axs[0, 2].legend()
-        except Exception:
-            pass
-        finish_axis(axs[0, 2], 'Angle of attack', 'AoA (degrees)')
+        if compare_with_bem:
+            try:
+                if bem_r_abs is not None and len(bem.alpha_list) > 0:
+                    axs[0, 2].plot(bem_r_abs, bem.alpha_list, '--k', label='BEM AoA')
+                    axs[0, 2].plot(bem_r_abs, bem.phi_list, ':k', label='BEM flow angle')
+                    axs[0, 2].legend()
+            except Exception:
+                pass
+        finish_axis(axs[0, 2], 'Angle of attack and Flow angle', f'AoA, $\phi$  (degrees)')
     except Exception:
         pass
 
