@@ -12,8 +12,8 @@ bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 # omega=bem.rpm/60*2*np.pi
 # tend=2*np.pi/omega*rev
 spacing='cosine'
-tend = 10/60
-dt = 0.1
+tend = 0.1
+dt = 0.005
 bem.tlst = np.arange(0, tend, dt)
 # bem.rpm = 40
 

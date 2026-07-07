@@ -10,8 +10,8 @@ a_ind_wake_lst=np.array([0,0.5,1])  #np.linspace(0,1,10)
 res=20
 i=0
 bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
-tend=5
-dt=0.1
+tend=0.1
+dt=0.005
 bem.tlst=np.arange(0,tend,dt)
 # Uwake=10
 # bem.rpm=40

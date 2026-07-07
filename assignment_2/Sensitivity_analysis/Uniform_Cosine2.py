@@ -12,8 +12,8 @@ res=20
 i=0
 bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
-tend=10/60
-dt=0.1
+tend=0.1
+dt=0.005
 bem.tlst=np.arange(0,tend,dt)
 # Uwake=10
 # bem.rpm=40

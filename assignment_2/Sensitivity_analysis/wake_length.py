@@ -26,7 +26,7 @@ alpha_out_lst=[]
 
 for rev in rev_lst:
 
-    dt=0.01
+    dt=0.005
     # bem.rpm=40
     omega=bem.rpm/60*2*np.pi
     tend=2*np.pi/omega*rev

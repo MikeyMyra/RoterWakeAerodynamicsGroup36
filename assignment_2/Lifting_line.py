@@ -683,7 +683,7 @@ if __name__ == "__main__":
     bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
     tend=0.1
-    dt=0.01
+    dt=0.005
     bem.tlst=np.arange(0,tend,dt)
     # Uwake=10
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
