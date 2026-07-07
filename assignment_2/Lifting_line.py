@@ -697,13 +697,13 @@ if __name__ == "__main__":
     compare_with_bem = False
 
     r_l = r_control[1:]
+    A_disk = np.pi * bem.radius**2
 
     C_T_LL = 0
     C_Q_LL = 0
     for i in range(len(r_l)):
-        A_a = 2 * np.pi * r_l[i] * bem.dr[i]
-        C_T_LL += (Fnorm_out[i+1] * blade_count * bem.dr[i]) / (0.5 * bem.rho * bem.U_inf**2 * A_a)
-        C_Q_LL += (Ftan_out[i+1] * blade_count * r_l[i] * bem.dr[i]) / (0.5 * bem.rho * bem.U_inf**2 * A_a * bem.radius)
+        C_T_LL += (Fnorm_out[i+1] * blade_count * bem.dr[i]) / (0.5 * bem.rho * bem.U_inf**2 * A_disk)
+        C_Q_LL += (Ftan_out[i+1] * blade_count * r_l[i] * bem.dr[i]) / (0.5 * bem.rho * bem.U_inf**2 * A_disk * bem.radius)
 
     C_P_LL = C_Q_LL * bem.omega * bem.radius / bem.U_inf
     print(f"Total thrust coefficient from lifting line: {C_T_LL:.4f}")
