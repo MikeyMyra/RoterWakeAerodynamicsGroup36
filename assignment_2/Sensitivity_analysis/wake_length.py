@@ -8,7 +8,8 @@ from Lifting_line import BEM
 
 # tend_lst=np.array([5,10,20])  #np.linspace(0,1,10)
 xend_lst=np.array([5,50,100])  #np.linspace(0,1,10)
-rev_lst=np.array([2,3,4,5,10])
+rev_lst=np.array([0.1,0.5,1,1.5,2,3])
+print(2*np.pi/(1607.1428571428573/60*2*np.pi)*rev_lst)
 res=10
 i=0
 bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
@@ -25,7 +26,7 @@ alpha_out_lst=[]
 
 for rev in rev_lst:
 
-    dt=0.1
+    dt=0.01
     # bem.rpm=40
     omega=bem.rpm/60*2*np.pi
     tend=2*np.pi/omega*rev

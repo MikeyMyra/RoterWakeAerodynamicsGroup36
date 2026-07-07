@@ -682,19 +682,19 @@ if __name__ == "__main__":
     
     bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
-    tend=1
-    dt=0.1
+    tend=0.1
+    dt=0.01
     bem.tlst=np.arange(0,tend,dt)
     # Uwake=10
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=80, track_convergence=True, spacing='cosine')
+    output = bem.Lifting_line(resolution=40, track_convergence=True, spacing='cosine')
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
 
     blade_count = bem.n_blades
     station_count = len(r_control) + 1
-    compare_with_bem = False
+    compare_with_bem = True
 
     r_l = r_control[1:]
     A_disk = np.pi * bem.radius**2
