@@ -158,50 +158,50 @@ axs[1,1].legend()
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(a_ind_wake_lst) - 1):
+for i in range(len(a_ind_wake_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((Gamma_out_lst[0] - Gamma_out_lst[i + 1]) / Gamma_out_lst[0]) * 100,
-                       r'$\Gamma\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+                       Gamma_out_lst[i],
+                       r'$\Gamma\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
             r'Circulation difference vs radius compared to $a_w=0$',
             r'$|\Delta\Gamma|$ (%)')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(a_ind_wake_lst) - 1):
+for i in range(len(a_ind_wake_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((a_out_lst[0] - a_out_lst[i + 1]) / a_out_lst[0]) * 100,
-                       r'$a\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+                       a_out_lst[i],
+                       r'$a\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
             r'Axial induction factor difference vs radius compared to $a_w=0$',
             r'$|\Delta a|$ (%)')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(a_ind_wake_lst) - 1):
+for i in range(len(a_ind_wake_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((aline_out_lst[0] - aline_out_lst[i + 1]) / aline_out_lst[0]) * 100,
-                       r'$a^\prime\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+                       aline_out_lst[i],
+                       r'$a^\prime\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
             r'Tangential induction factor difference vs radius compared to $a_w=0$',
             r'$|\Delta a^\prime|$ (%)')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(a_ind_wake_lst) - 1):
+for i in range(len(a_ind_wake_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((Fnorm_out_lst[0] - Fnorm_out_lst[i + 1]) / Fnorm_out_lst[0]) * 100,
-                       r'$F_{norm}\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+                       Fnorm_out_lst[i],
+                       r'$F_{norm}\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
             r'Normal force difference vs radius compared to $a_w=0$',
             r'$|\Delta F_{norm}|$ (%)')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(a_ind_wake_lst) - 1):
+for i in range(len(a_ind_wake_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((Ftan_out_lst[0] - Ftan_out_lst[i + 1]) / Ftan_out_lst[0]) * 100,
-                       r'$F_{tan}\,(a_w=$' f'{a_ind_wake_lst[i + 1]})')
+                       Ftan_out_lst[i],
+                       r'$F_{tan}\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
             r'Tangential force difference vs radius compared to $a_w=0$',
             r'$|\Delta F_{tan}|$ (%)')

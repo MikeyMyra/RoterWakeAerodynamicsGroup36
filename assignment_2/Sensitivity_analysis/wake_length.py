@@ -8,7 +8,7 @@ from Lifting_line import BEM
 
 # tend_lst=np.array([5,10,20])  #np.linspace(0,1,10)
 xend_lst=np.array([5,50,100])  #np.linspace(0,1,10)
-rev_lst=np.array([2,5,10,50,200])
+rev_lst=np.array([2,3,4,5,10])
 res=10
 i=0
 bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
@@ -38,15 +38,13 @@ for rev in rev_lst:
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
 
-    a_out_lst.append(a_out)
-    aline_out_lst.append(aline_out)
-    Fnorm_out_lst.append(Fnorm_out)
-    Ftan_out_lst.append(Ftan_out)
-    Gamma_out_lst.append(Gamma_out)
-    conv_iter_lst.append(conv_iter)
-    conv_hist_lst.append(conv_hist)
-    r_control_lst.append(r_control)
-    alpha_out_lst.append(alpha_out)
+    a_out_lst.append(np.copy(a_out))
+    aline_out_lst.append(np.copy(aline_out))
+    Fnorm_out_lst.append(np.copy(Fnorm_out))
+    Ftan_out_lst.append(np.copy(Ftan_out))
+    Gamma_out_lst.append(np.copy(Gamma_out))
+    r_control_lst.append(np.copy(r_control))
+    alpha_out_lst.append(np.copy(alpha_out))
 
     blade_count = bem.n_blades
     station_count = len(r_control)
@@ -151,57 +149,55 @@ axs[1, 1].set_ylabel('Relative error')
 axs[1, 1].set_xlabel('Iteration')
 axs[1, 1].legend()
 
-# --- Difference plots (all in percentage, consistent format) ---
+fig = plt.figure()
+ax = fig.subplots(1, 1)
+for i in range(len(rev_lst)):
+    plot_blade_overlay(ax, r_control,
+                       Gamma_out_lst[i],
+                       r'$\Gamma\,(rev=$' f'{rev_lst[i]})')
+finish_axis(ax,
+            r'Circulation vs radius',
+            r'$\Gamma$')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(rev_lst) - 1):
+for i in range(len(rev_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((Gamma_out_lst[-1] - Gamma_out_lst[i]) / Gamma_out_lst[-1]) * 100,
-                       r'$\Gamma\,(n_{rev}=$' f'{rev_lst[i]})')
+                       a_out_lst[i],
+                       r'$a\,(rev=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Circulation difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
-            r'$|\Delta\Gamma|$ (%)')
+            r'Axial induction factor vs radius',
+            r'$ a$')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(rev_lst) - 1):
+for i in range(len(rev_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((a_out_lst[-1] - a_out_lst[i]) / a_out_lst[-1]) * 100,
-                       r'$a\,(n_{rev}=$' f'{rev_lst[i]})')
+                       aline_out_lst[i],
+                       r'$a^\prime\,(rev=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Axial induction factor difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
-            r'$|\Delta a|$ (%)')
+            r'Tangential induction factor vs radius',
+            r'$a^\prime$')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(rev_lst) - 1):
+for i in range(len(rev_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((aline_out_lst[-1] - aline_out_lst[i]) / aline_out_lst[-1]) * 100,
-                       r'$a^\prime\,(n_{rev}=$' f'{rev_lst[i]})')
+                       Fnorm_out_lst[i],
+                       r'$F_{norm}\,(rev=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Tangential induction factor difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
-            r'$|\Delta a^\prime|$ (%)')
+            r'Normal force vs radius',
+            r'$ F_{norm}$')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
-for i in range(len(rev_lst) - 1):
+for i in range(len(rev_lst)):
     plot_blade_overlay(ax, r_control,
-                       abs((Fnorm_out_lst[-1] - Fnorm_out_lst[i]) / Fnorm_out_lst[-1]) * 100,
-                       r'$F_{norm}\,(n_{rev}=$' f'{rev_lst[i]})')
+                       Ftan_out_lst[i],
+                       r'$F_{tan}\,(rev=$' f'{rev_lst[i]})')
 finish_axis(ax,
-            r'Normal force difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
-            r'$|\Delta F_{norm}|$ (%)')
-
-fig = plt.figure()
-ax = fig.subplots(1, 1)
-for i in range(len(rev_lst) - 1):
-    plot_blade_overlay(ax, r_control,
-                       abs((Ftan_out_lst[-1] - Ftan_out_lst[i]) / Ftan_out_lst[-1]) * 100,
-                       r'$F_{tan}\,(n_{rev}=$' f'{rev_lst[i]})')
-finish_axis(ax,
-            r'Tangential force difference vs radius compared to $n_{rev}=$' f'{rev_lst[-1]}',
-            r'$|\Delta F_{tan}|$ (%)')
+            r'Tangential force vs radius',
+            r'$ F_{tan}$')
 
 
 plt.tight_layout()
