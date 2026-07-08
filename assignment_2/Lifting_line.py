@@ -820,7 +820,7 @@ if __name__ == "__main__":
                     axs[0, 2].legend()
             except Exception:
                 pass
-        finish_axis(axs[0, 2], 'Angle of attack and Flow angle', f'AoA, $\phi$  (degrees)')
+        finish_axis(axs[0, 2], 'Angle of attack and Flow angle', r'AoA, $\phi$  (degrees)')
     except Exception:
         pass
 
