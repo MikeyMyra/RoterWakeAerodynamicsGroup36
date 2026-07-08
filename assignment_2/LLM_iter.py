@@ -19,10 +19,10 @@ def lifting_line(
     cl_data,
     cd_data,
     # Solver settings
-    resolution       = 20,
+    resolution       = 40,
     tolerance        = 1e-6,
     max_iterations   = 1000,
-    spacing          = 'linear',
+    spacing          = 'cosine',
     use_prandtl      = True,
     track_convergence = False,
     relax            = 0.25,
@@ -84,8 +84,8 @@ def lifting_line(
     A_axial      = np.zeros((n_mat, n_mat))
     A_tangential = np.zeros((n_mat, n_mat))
 
-    tend = 5.0
-    dt   = 0.1
+    tend = 0.1
+    dt   = 0.005
     bem.tlst  = np.arange(0, tend, dt)
     bem.omega = 1  # NOTE: hardcoded to 1 in Make_ind_matrix — TODO: should this be (2pi*rpm)/60?
     bem.xarr  = bem.tlst * bem.V_axial
@@ -256,5 +256,4 @@ def lifting_line(
     return results
 
 
-
-# lifting_line()
+lifting_line()
