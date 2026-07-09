@@ -22,6 +22,8 @@ class BEM:
         self.U_inf = U_inf  # m/s
         self.J = J
         self.rpm = 60 * (self.U_inf / (J * 2 * self.radius))
+        self.n_rps = self.rpm / 60      # rotational speed [rev/s] for propeller convention
+        self.D = 2 * self.radius        # rotor diameter [m] for propeller convention
         self.altitude = 2000  # meters
         self.incidence = 0
         self.rotor_yaw = 0
@@ -110,7 +112,7 @@ class BEM:
         
         return F_total
     
-    def biot_savart(self,X1,X2,Xp,gamma): #TODO: Add CORE like in answer_from_the_github_page.js
+    def biot_savart(self,X1,X2,Xp,gamma):
         eps=1e-6
         R1=np.sqrt((Xp[0]-X1[0])**2+(Xp[1]-X1[1])**2+(Xp[2]-X1[2])**2)
         R1=max(R1,eps)
@@ -235,7 +237,7 @@ class BEM:
 
 
 
-    def Lifting_line(self, resolution=100,a_ind_wake=0,tend=5, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False, plot_geometry=False):
+    def Lifting_line(self, resolution=100,a_ind_wake=0.,tend=5, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False, plot_geometry=False):
         cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
         cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
         self.resolution=resolution
@@ -608,11 +610,11 @@ class BEM:
 
                 
                 # Apply Glauert correction for axial induction
-                a_calc = self._apply_glauert_correction(C_T) # Lucas: Is this necessary? Our propellor is not heavily loaded right?
+                a_calc = (1/2) * (1 - np.sqrt(max(0, 1 - C_T))) # self._apply_glauert_correction(C_T)
 
                 a_calc = np.clip(a_calc, 0, 0.95)
                 # Azimuthal induction
-                a_prime_calc = (F_azimuth * self.n_blades) / (2 * self.rho * (2 * np.pi * r_abs) * self.U_inf**2 * (1 - a_calc) * omega * r_abs)
+                a_prime_calc = (F_azimuth * self.n_blades) / (2 * self.rho * (2 * np.pi * r_abs) * self.U_inf * (1 - a_calc) * omega * r_abs)
                 
                 # Check convergence
                 if abs(a_calc - a) < tolerance and abs(a_prime_calc - a_prime) < tolerance:
@@ -671,10 +673,15 @@ class BEM:
                 print(
                     f"Warning: Blade element method did not converge within the maximum iterations for station {r_abs} for spacing {spacing}.")
         
-        # Total coefficients
-        self.CT = dT_total / (0.5 * self.rho * self.U_inf**2 * A_disk)
-        self.CQ = dQ_total / (0.5 * self.rho * self.U_inf**2 * A_disk * self.radius)
-        self.CP = self.CQ * omega * self.radius / self.U_inf
+        # Total coefficients (propeller convention: rho * n^x * D^y)
+        # C_T = T / (rho n^2 D^4), C_Q = Q / (rho n^2 D^5), C_P = P / (rho n^3 D^5)
+        self.CT = dT_total / (self.rho * self.n_rps**2 * self.D**4)
+        self.CQ = dQ_total / (self.rho * self.n_rps**2 * self.D**5)
+        self.CP = (dQ_total * omega) / (self.rho * self.n_rps**3 * self.D**5)
+
+        print(f"Total thrust coefficient from BEM:  C_T = {self.CT:.4f}")
+        print(f"Total torque coefficient from BEM:  C_Q = {self.CQ:.4f}")
+        print(f"Total power coefficient from BEM:   C_P = {self.CP:.4f}")
 
 
 
@@ -687,7 +694,7 @@ if __name__ == "__main__":
     bem.tlst=np.arange(0,tend,dt)
     # Uwake=10
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=40, track_convergence=True, spacing='cosine')
+    output = bem.Lifting_line(resolution=40, a_ind_wake=-0.2, track_convergence=True, spacing='cosine')
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
@@ -699,16 +706,19 @@ if __name__ == "__main__":
     r_l = r_control[1:]
     A_disk = np.pi * bem.radius**2
 
-    C_T_LL = 0
-    C_Q_LL = 0
+    # Propeller convention: C_T = T/(rho n^2 D^4), C_Q = Q/(rho n^2 D^5), C_P = P/(rho n^3 D^5)
+    T_LL = 0
+    Q_LL = 0
     for i in range(len(r_l)):
-        C_T_LL += (Fnorm_out[i+1] * blade_count * bem.dr[i]) / (0.5 * bem.rho * bem.U_inf**2 * A_disk)
-        C_Q_LL += (Ftan_out[i+1] * blade_count * r_l[i] * bem.dr[i]) / (0.5 * bem.rho * bem.U_inf**2 * A_disk * bem.radius)
+        T_LL += Fnorm_out[i+1] * blade_count * bem.dr[i]
+        Q_LL += Ftan_out[i+1] * blade_count * r_l[i] * bem.dr[i]
 
-    C_P_LL = C_Q_LL * bem.omega * bem.radius / bem.U_inf
-    print(f"Total thrust coefficient from lifting line: {C_T_LL:.4f}")
-    print(f"Total torque coefficient from lifting line: {C_Q_LL:.4f}")
-    print(f"Total power coefficient from lifting line: {C_P_LL:.4f}")
+    C_T_LL = T_LL / (bem.rho * bem.n_rps**2 * bem.D**4)
+    C_Q_LL = Q_LL / (bem.rho * bem.n_rps**2 * bem.D**5)
+    C_P_LL = (Q_LL * bem.omega) / (bem.rho * bem.n_rps**3 * bem.D**5)
+    print(f"Total thrust coefficient from lifting line: C_T = {C_T_LL:.4f}")
+    print(f"Total torque coefficient from lifting line: C_Q = {C_Q_LL:.4f}")
+    print(f"Total power coefficient from lifting line:  C_P = {C_P_LL:.4f}")
 
 
     def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
@@ -748,7 +758,7 @@ if __name__ == "__main__":
     bem_r_abs = None
     if compare_with_bem:
         # run BEM blade-element solver for comparison
-        bem.blade_element(resolution=100, use_prandtl=False)
+        bem.blade_element(resolution=100, use_prandtl=True)
         bem_r_abs = np.array(bem.r_R_list) * bem.radius
 
 
@@ -789,16 +799,16 @@ if __name__ == "__main__":
 
     # Forces
     try:
-        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out/(0.5 * bem.rho * bem.U_inf**2 * bem.radius), 'Fnorm')
-        plot_blade_overlay(axs[1, 0], r_control, Ftan_out/(0.5 * bem.rho * bem.U_inf**2 * bem.radius), 'Ftan', style='-s')
-        finish_axis(axs[1, 0], 'Section forces', r'Force per unit span coefficient $ C_F = \frac{1}{\frac{1}{2} \rho U_\infty^2 R}\frac{dF}{dr}$')
+        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out/(bem.rho * bem.n_rps**2 * bem.D**3), 'Fnorm')
+        plot_blade_overlay(axs[1, 0], r_control, Ftan_out/(bem.rho * bem.n_rps**2 * bem.D**3), 'Ftan', style='-s')
+        finish_axis(axs[1, 0], 'Section forces', r'Force per unit span coefficient $ C_F = \frac{1}{\rho n^2 D^3}\frac{dF}{dr}$')
         # overlay BEM forces
         if compare_with_bem:
             try:
                 if bem_r_abs is not None and len(bem.F_axial_list) > 0:
-                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_axial_list)/(0.5 * bem.rho * bem.U_inf**2 * bem.radius), '--k', label='BEM F_axial')
+                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_axial_list)/(bem.rho * bem.n_rps**2 * bem.D**3), '--k', label='BEM F_axial')
                 if bem_r_abs is not None and len(bem.F_azimuth_list) > 0:
-                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_azimuth_list)/(0.5 * bem.rho * bem.U_inf**2 * bem.radius), ':k', label='BEM F_azimuth')
+                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_azimuth_list)/(bem.rho * bem.n_rps**2 * bem.D**3), ':k', label='BEM F_azimuth')
                 axs[1, 0].legend()
             except Exception as e:
                 print(e)
@@ -820,7 +830,7 @@ if __name__ == "__main__":
                     axs[0, 2].legend()
             except Exception:
                 pass
-        finish_axis(axs[0, 2], 'Angle of attack and Flow angle', f'AoA, $\phi$  (degrees)')
+        finish_axis(axs[0, 2], 'Angle of attack and Flow angle', r'AoA, $\phi$  (degrees)')
     except Exception:
         pass
 

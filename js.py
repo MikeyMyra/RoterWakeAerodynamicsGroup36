@@ -44,7 +44,7 @@ def geo_blade(r_R):
     return chord, twist
 
 
-def velocity_3d_from_vortex_filament(gamma, xv1, xv2, xvp, core=1e-5):
+def velocity_3d_from_vortex_filament(gamma, xv1, xv2, xvp, core=1e-3):
     x1, y1, z1 = xv1;  x2, y2, z2 = xv2;  xp, yp, zp = xvp
     r1 = np.sqrt((xp-x1)**2 + (yp-y1)**2 + (zp-z1)**2)
     r2 = np.sqrt((xp-x2)**2 + (yp-y2)**2 + (zp-z2)**2)
@@ -61,7 +61,7 @@ def velocity_3d_from_vortex_filament(gamma, xv1, xv2, xvp, core=1e-5):
     return np.array([k*r1xr2_x, k*r1xr2_y, k*r1xr2_z])
 
 
-def velocity_induced_single_ring(ring, controlpoint, core=1e-5):
+def velocity_induced_single_ring(ring, controlpoint, core=1e-3):
     vel = np.zeros(3)
     for fil in ring['filaments']:
         xv1 = np.array([fil['x1'], fil['y1'], fil['z1']])
@@ -104,6 +104,7 @@ def create_rotor_geometry(span_array, radius, tip_speed_ratio, u_inf, theta_arra
     rings         = []
 
     for k_rot in range(n_blades):
+        print(f"Creating geometry for blade {k_rot+1}/{n_blades}")
         angle_rotation = 2 * np.pi / n_blades * k_rot
         cos_rot = np.cos(angle_rotation)
         sin_rot = np.sin(angle_rotation)
@@ -142,7 +143,7 @@ def create_rotor_geometry(span_array, radius, tip_speed_ratio, u_inf, theta_arra
                 xt = filaments[-1]['x1']; yt = filaments[-1]['y1']; zt = filaments[-1]['z1']
                 dy = (np.cos(-theta_array[j+1]) - np.cos(-theta_array[j])) * span_array[i]
                 dz = (np.sin(-theta_array[j+1]) - np.sin(-theta_array[j])) * span_array[i]
-                dx = (theta_array[j+1] - theta_array[j]) / (np.pi * tip_speed_ratio / radius)
+                dx = (theta_array[j+1] - theta_array[j]) / (tip_speed_ratio / radius)
                 filaments.append({'x1': xt+dx, 'y1': yt+dy, 'z1': zt+dz,
                                   'x2': xt,    'y2': yt,    'z2': zt,    'Gamma': 0})
 
@@ -157,7 +158,7 @@ def create_rotor_geometry(span_array, radius, tip_speed_ratio, u_inf, theta_arra
                 xt = filaments[-1]['x2']; yt = filaments[-1]['y2']; zt = filaments[-1]['z2']
                 dy = (np.cos(-theta_array[j+1]) - np.cos(-theta_array[j])) * span_array[i+1]
                 dz = (np.sin(-theta_array[j+1]) - np.sin(-theta_array[j])) * span_array[i+1]
-                dx = (theta_array[j+1] - theta_array[j]) / (np.pi * tip_speed_ratio / radius)
+                dx = (theta_array[j+1] - theta_array[j]) / ( tip_speed_ratio / radius)
                 filaments.append({'x1': xt,    'y1': yt,    'z1': zt,
                                   'x2': xt+dx, 'y2': yt+dy, 'z2': zt+dz, 'Gamma': 0})
 
@@ -188,6 +189,7 @@ def solve_lifting_line_system_matrix_approach(rotor_wake_system, wind, omega, ro
     MatrixW = np.zeros((n_cp, n_rings))
 
     for icp in range(n_cp):
+        print(f"Precomputing influence matrices for control point {icp+1}/{n_cp}")
         for jring in range(n_rings):
             rings[jring] = update_gamma_single_ring(rings[jring], 1, 1)
             vel = velocity_induced_single_ring(rings[jring], controlpoints[icp]['coordinates'])
@@ -228,6 +230,8 @@ def solve_lifting_line_system_matrix_approach(rotor_wake_system, wind, omega, ro
             print(f"Converged after {kiter+1} iterations, error={error:.6f}")
             break
         GammaNew = (1 - conv_weight) * Gamma + conv_weight * GammaNew
+        print(f"Iteration {kiter+1}/{n_iterations}, error={error:.6f}")
+
 
     return {'a': a_out, 'aline': aline_out, 'r_R': r_R_out,
             'Fnorm': Fnorm_out, 'Ftan': Ftan_out, 'Gamma': Gamma_out}
@@ -252,8 +256,9 @@ def solve_rotor_lifting_line(TSR, n_elements, n_rotations):
     )
     results = solve_lifting_line_system_matrix_approach(
         rotor_wake_system, wind=[60, 0, 0],
-        omega=np.pi * TSR * u_inf / (max_radius), rotor_radius=max_radius,
+        omega= TSR * u_inf / (max_radius), rotor_radius=max_radius,
     )
+    print("Lifting-line solution completed.")
     return results, rotor_wake_system
 
 
@@ -482,9 +487,9 @@ def make_plots(results, wake, TSR):
 # ── main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    TSR         = 1/1.6
+    TSR         = np.pi/1.6
     N_ELEMENTS  = 40
-    N_ROTATIONS = 4
+    N_ROTATIONS = 3
 
     results, wake = solve_rotor_lifting_line(TSR, N_ELEMENTS, N_ROTATIONS)
     make_plots(results, wake, TSR)
