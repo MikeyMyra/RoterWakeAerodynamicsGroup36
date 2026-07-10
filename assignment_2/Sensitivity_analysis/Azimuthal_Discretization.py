@@ -7,11 +7,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Lifting_line import BEM
 # data_cos=np.loadtxt('assignment_2\\Sensitivity_analysis\\Finest_grid_cosine.txt')
 # print(len(data_cos[0,:]))
-res_lst = np.array([10,20,40,80,120,200])
+res_lst = np.array([10,20,40,80,120])
 bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 # omega=bem.rpm/60*2*np.pi
 # tend=2*np.pi/omega*rev
-spacing='cosine'
+spacing='linear'
 tend = 0.1
 dt = 0.005
 bem.tlst = np.arange(0, tend, dt)

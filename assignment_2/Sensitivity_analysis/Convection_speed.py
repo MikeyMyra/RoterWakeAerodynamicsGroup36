@@ -163,8 +163,8 @@ for i in range(len(a_ind_wake_lst)):
                        Gamma_out_lst[i],
                        r'$\Gamma\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
-            r'Circulation difference vs radius compared to $a_w=0$',
-            r'$|\Delta\Gamma|$ (%)')
+            r'Circulation vs radius',
+            r'$\Gamma$')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
@@ -173,8 +173,8 @@ for i in range(len(a_ind_wake_lst)):
                        a_out_lst[i],
                        r'$a\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
-            r'Axial induction factor difference vs radius compared to $a_w=0$',
-            r'$|\Delta a|$ (%)')
+            r'Axial induction factor vs radius',
+            r'$ a$')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
@@ -183,8 +183,8 @@ for i in range(len(a_ind_wake_lst)):
                        aline_out_lst[i],
                        r'$a^\prime\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
-            r'Tangential induction factor difference vs radius compared to $a_w=0$',
-            r'$|\Delta a^\prime|$ (%)')
+            r'Tangential induction factor vs radius',
+            r'$ a^\prime$')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
@@ -193,8 +193,8 @@ for i in range(len(a_ind_wake_lst)):
                        Fnorm_out_lst[i],
                        r'$F_{norm}\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
-            r'Normal force difference vs radius compared to $a_w=0$',
-            r'$|\Delta F_{norm}|$ (%)')
+            r'Normal force vs radius',
+            r'$ F_{norm}$')
 
 fig = plt.figure()
 ax = fig.subplots(1, 1)
@@ -203,8 +203,8 @@ for i in range(len(a_ind_wake_lst)):
                        Ftan_out_lst[i],
                        r'$F_{tan}\,(a_w=$' f'{a_ind_wake_lst[i]})')
 finish_axis(ax,
-            r'Tangential force difference vs radius compared to $a_w=0$',
-            r'$|\Delta F_{tan}|$ (%)')
+            r'Tangential force vs radius ',
+            r'$ F_{tan}$')
 
 
 plt.tight_layout()
