@@ -27,7 +27,12 @@ class BEM:
         self.altitude = 2000  # meters
         self.incidence = 0
         self.rotor_yaw = 0
-        
+
+        # Lifting-line vortex geometry / regularisation
+        self.cp_chord_frac = 0.25      # control point at 1/4 chord, co-located with the bound vortex
+        self.trail_chord_frac = 1.25   # on-blade trailing legs end 1/4 chord behind the TE
+        self.vortex_core = 0.04        # Rankine core radius [m] (~ panel width); damps root/tip oscillations
+
         # Airfoil data
         self.AoA, self.cl, self.cd, self.cm = self._get_airfoil()
         self.rho = self._get_isa_density(self.altitude)
@@ -75,7 +80,13 @@ class BEM:
             a = 1 + ((CT - CT1) / (4 * (np.sqrt(CT1) - 1)))
         
         return a
-    
+
+    @staticmethod
+    def circulation_from_momentum(U_inf, omega, a, a_prime, n_blades):
+        a = np.asarray(a, dtype=float)
+        a_prime = np.asarray(a_prime, dtype=float)
+        return (4 * np.pi * U_inf**2 * a * (1 - a)) / (n_blades * omega * (1 + a_prime))
+
     def _calculate_prandtl_factor(self, r_norm, a):
         
         mu = r_norm
@@ -122,6 +133,11 @@ class BEM:
         R12y=-(Xp[0]-X1[0])*(Xp[2]-X2[2])+(Xp[2]-X1[2])*(Xp[0]-X2[0])
         R12z=(Xp[0]-X1[0])*(Xp[1]-X2[1])-(Xp[1]-X1[1])*(Xp[0]-X2[0])
         R12sqrt=R12x**2+R12y**2+R12z**2
+
+        rc=getattr(self,'vortex_core',0.0)
+        if rc>0.0:
+            r0sq=(X2[0]-X1[0])**2+(X2[1]-X1[1])**2+(X2[2]-X1[2])**2
+            R12sqrt=R12sqrt+(rc*rc)*r0sq
         R12sqrt=max(R12sqrt,eps)
         R01=(X2[0]-X1[0])*(Xp[0]-X1[0])+(X2[1]-X1[1])*(Xp[1]-X1[1])+(X2[2]-X1[2])*(Xp[2]-X1[2])
         R02=(X2[0]-X1[0])*(Xp[0]-X2[0])+(X2[1]-X1[1])*(Xp[1]-X2[1])+(X2[2]-X1[2])*(Xp[2]-X2[2])
@@ -255,18 +271,26 @@ class BEM:
         r_stations_norm = np.insert(r_stations_norm, 0, 0)
         self.r_stations_abs = r_stations_norm * self.radius
         self.dr =  np.diff(self.r_stations_abs)
-        r_control_abs = self.r_stations_abs#[:-1] + self.dr/2
-        r_control_norm = r_control_abs/self.radius
 
-        twist_stations = []
-        chord_norm_stations = []
-        for r_norm in r_control_norm:
+        def blade_props(r_norm):
             if r_norm >= self.blade_start_fraction:
-                twist_stations.append(-50 * r_norm + 35 + self.collective_blade_pitch + self.collective_blade_pitch_location * 50 - 35 )
-                chord_norm_stations.append(0.18 - 0.06 * r_norm)
+                twist = -50 * r_norm + 35 + self.collective_blade_pitch + self.collective_blade_pitch_location * 50 - 35
+                chord = 0.18 - 0.06 * r_norm
             else:
-                twist_stations.append(0)
-                chord_norm_stations.append(0)
+                twist, chord = 0.0, 0.0
+            return twist, chord
+
+        # Node (panel-edge) properties: used to lay down the bound vortex and trailing legs.
+        node_twist = np.array([blade_props(rn)[0] for rn in r_stations_norm])
+        node_chord_norm = np.array([blade_props(rn)[1] for rn in r_stations_norm])
+
+        r_control_abs = 0.5 * (self.r_stations_abs[:-1] + self.r_stations_abs[1:])
+        r_control_norm = r_control_abs / self.radius
+        twist_stations = np.array([blade_props(rn)[0] for rn in r_control_norm])
+        chord_norm_stations = np.array([blade_props(rn)[1] for rn in r_control_norm])
+
+        cp_chord_frac = getattr(self, 'cp_chord_frac', 0.25)      # chordwise cp position (co-located with bound vortex)
+        trail_chord_frac = getattr(self, 'trail_chord_frac', 1.25)  # where the on-blade trailing legs end
 
         def rot_yz(vec,angle):
             c=np.cos(angle)
@@ -282,23 +306,48 @@ class BEM:
 
             for blade in range(self.n_blades):
                 angle_rotation=2*np.pi/self.n_blades*blade
-                for i in range(len(r_control_abs)-1):
+                for i in range(len(self.r_stations_abs)-1):
                     r_in=self.r_stations_abs[i]
                     r_out=self.r_stations_abs[i+1]
-                    r_mid=r_control_abs[i]
-                    cp=rot_yz([0,r_mid, 0],angle_rotation)
+
+                    # Node (panel-edge) chord/TE geometry for the bound vortex and trailing legs.
+                    chord_in = node_chord_norm[i] * self.radius
+                    twist_in_rad = np.radians(node_twist[i])
+                    x_te_in = chord_in * np.sin(-twist_in_rad)
+                    z_te_in = -chord_in * np.cos(twist_in_rad)
+
+                    chord_out = node_chord_norm[i+1] * self.radius
+                    twist_out_rad = np.radians(node_twist[i+1])
+                    x_te_out = chord_out * np.sin(-twist_out_rad)
+                    z_te_out = -chord_out * np.cos(twist_out_rad)
+
+                    # Control point at the panel MIDSPAN, co-located chordwise with the bound
+                    # vortex (c/4). This samples the induced velocity on the lifting line, so the
+                    # induction magnitude matches momentum theory / BEM.
+                    r_mid = r_control_abs[i]
+                    chord_mid = chord_norm_stations[i] * self.radius
+                    twist_mid_rad = np.radians(twist_stations[i])
+                    x_te_mid = chord_mid * np.sin(-twist_mid_rad)
+                    z_te_mid = -chord_mid * np.cos(twist_mid_rad)
+                    cp = rot_yz([cp_chord_frac * x_te_mid, r_mid, cp_chord_frac * z_te_mid], angle_rotation)
                     controlpoints.append(cp)
                     panels.append(i)
 
-                    filaments=[]
-                    filaments.append((rot_yz([0,r_in, 0],angle_rotation),rot_yz([0,r_out, 0],angle_rotation)))
+                    # Quarter-chord points (LE is the chord origin, so c/4 = 0.25 * TE offset).
+                    quarter_in = [0.25 * x_te_in, r_in, 0.25 * z_te_in]
+                    quarter_out = [0.25 * x_te_out, r_out, 0.25 * z_te_out]
 
-                    chord_in = chord_norm_stations[i] * self.radius
-                    twist_in = twist_stations[i]
-                    twist_in_rad = np.radians(twist_in)
-                    x_te_in = chord_in * np.sin(-twist_in_rad)
-                    z_te_in = -chord_in * np.cos(twist_in_rad)
-                    filaments.append((rot_yz([x_te_in, r_in, z_te_in], angle_rotation), rot_yz([0, r_in, 0], angle_rotation)))
+                    # Trailing legs run from the c/4 bound vortex to trail_chord_frac * chord
+                    # (a quarter chord behind the TE by default); the wake convects from there.
+                    trail_in = [trail_chord_frac * x_te_in, r_in, trail_chord_frac * z_te_in]
+                    trail_out = [trail_chord_frac * x_te_out, r_out, trail_chord_frac * z_te_out]
+
+                    filaments=[]
+                    # Bound vortex at the quarter chord.
+                    filaments.append((rot_yz(quarter_in, angle_rotation), rot_yz(quarter_out, angle_rotation)))
+
+                    # Inboard on-blade trailing leg: c/4-behind-TE back to the quarter-chord bound vortex.
+                    filaments.append((rot_yz(trail_in, angle_rotation), rot_yz(quarter_in, angle_rotation)))
 
                     for j in range(len(theta_array) - 1):
                         xt = filaments[-1][0][0]; yt = filaments[-1][0][1]; zt = filaments[-1][0][2]
@@ -309,12 +358,8 @@ class BEM:
                         filaments.append((np.array([xt+dx, yt+dy, zt+dz]), np.array([xt, yt, zt])))
 
 
-                    chord_out = chord_norm_stations[i+1] * self.radius
-                    twist_out = twist_stations[i+1]
-                    twist_out_rad = np.radians(twist_out)
-                    x_te_out = chord_out * np.sin(-twist_out_rad)
-                    z_te_out = -chord_out * np.cos(twist_out_rad)
-                    filaments.append((rot_yz([0, r_out, 0], angle_rotation), rot_yz([x_te_out, r_out, z_te_out], angle_rotation)))
+                    # Outboard on-blade trailing leg: quarter-chord bound vortex out to c/4-behind-TE.
+                    filaments.append((rot_yz(quarter_out, angle_rotation), rot_yz(trail_out, angle_rotation)))
 
                     for j in range(len(theta_array) - 1):
                         xt = filaments[-1][1][0]; yt = filaments[-1][1][1]; zt = filaments[-1][1][2]
@@ -355,9 +400,10 @@ class BEM:
                 fig3 = plt.figure()
                 ax3 = fig3.add_subplot(projection='3d')
                 ax3.set_proj_type('ortho')
+                ax3.view_init(elev=90, azim=0)
                 cps = np.array(controlpoints)
                 if cps.size:
-                    ax3.scatter(cps[:, 0], cps[:, 1], cps[:, 2], c='r', marker='o', label='control points')
+                    ax3.scatter(cps[:, 0], cps[:, 1], cps[:, 2], c='r', marker='', label='control points')
 
                 # Draw filament segments
                 for ring in rings:
@@ -459,7 +505,7 @@ class BEM:
         if error>=tolerance:
             print("Warning: Lifting line did not converge but it did stop")
 
-        return a_temp, aline_temp, Fnorm_temp, Ftan_temp, GammaNew, converged_iter, self.convergence_history, r_control_abs[1:] + self.dr/2, alpha_temp, phi_temp
+        return a_temp, aline_temp, Fnorm_temp, Ftan_temp, GammaNew, converged_iter, self.convergence_history, r_control_abs, alpha_temp, phi_temp
 
         
 
@@ -689,19 +735,20 @@ if __name__ == "__main__":
     
     bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
-    tend=0.1
+
+    tend=0.2
     dt=0.005
     bem.tlst=np.arange(0,tend,dt)
     # Uwake=10
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=40, a_ind_wake=-0.2, track_convergence=True, spacing='cosine')
+    output = bem.Lifting_line(resolution=20, a_ind_wake=-0.2, track_convergence=True, spacing='cosine', plot_geometry=True)
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
 
     blade_count = bem.n_blades
     station_count = len(r_control) + 1
-    compare_with_bem = True
+    compare_with_bem = False
 
     r_l = r_control[1:]
     A_disk = np.pi * bem.radius**2
@@ -719,6 +766,43 @@ if __name__ == "__main__":
     print(f"Total thrust coefficient from lifting line: C_T = {C_T_LL:.4f}")
     print(f"Total torque coefficient from lifting line: C_Q = {C_Q_LL:.4f}")
     print(f"Total power coefficient from lifting line:  C_P = {C_P_LL:.4f}")
+
+   
+    if False:
+        bem.blade_element(resolution=100, use_prandtl=False)
+        omega = bem.omega
+        a_bem = np.asarray(bem.a_list, dtype=float)
+        a_prime_bem = np.asarray(bem.a_prime_list, dtype=float)
+        Gamma_actual = np.asarray(bem.circulation_list, dtype=float)
+        r_bem_abs = np.asarray(bem.r_R_list, dtype=float) * bem.radius
+        Gamma_theory = BEM.circulation_from_momentum(bem.U_inf, omega, a_bem, a_prime_bem, bem.n_blades)
+
+        valid = np.abs(Gamma_actual) > 1e-6  # skip zeroed-out root stations
+        rel_err = np.abs(Gamma_theory[valid] - Gamma_actual[valid]) / np.abs(Gamma_actual[valid])
+        if rel_err.size:
+            print(f"Momentum-circulation check vs BEM: max rel. diff = {np.max(rel_err):.2e}, "
+                f"mean rel. diff = {np.mean(rel_err):.2e}")
+
+        # Dedicated comparison figure: actual BEM circulation vs momentum-implied circulation.
+        fig_gamma, (ax_g, ax_e) = plt.subplots(1, 2, figsize=(12, 4.5))
+        ax_g.plot(r_bem_abs, Gamma_actual, '-o', ms=3, label=r'BEM $\Gamma = \frac{1}{2} V c\, C_l$')
+        ax_g.plot(r_bem_abs, Gamma_theory, '--s', ms=3,
+                label=r'Momentum $\Gamma = \frac{4\pi U_\infty^2 a(1-a)}{B\,\Omega(1+a^\prime)}$')
+        ax_g.axvline(bem.blade_start_fraction * bem.radius, color='k', ls=':', lw=1, label='blade start')
+        ax_g.set_xlabel('r (m)')
+        ax_g.set_ylabel(r'per-blade circulation $\Gamma$ (m$^2$/s)')
+        ax_g.set_title('Circulation: blade-element vs momentum relation (BEM, no Prandtl)')
+        ax_g.legend()
+        ax_g.grid(True)
+
+        ax_e.plot(r_bem_abs[valid], 100 * rel_err, '-o', ms=3, color='C3')
+        ax_e.axvline(bem.blade_start_fraction * bem.radius, color='k', ls=':', lw=1, label='blade start')
+        ax_e.set_xlabel('r (m)')
+        ax_e.set_ylabel('relative difference (%)')
+        ax_e.set_title('Deviation (residual is the drag term only)')
+        ax_e.legend()
+        ax_e.grid(True)
+        fig_gamma.tight_layout()
 
 
     def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
