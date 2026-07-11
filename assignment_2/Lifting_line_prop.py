@@ -85,7 +85,7 @@ class BEM:
     def circulation_from_momentum(U_inf, omega, a, a_prime, n_blades):
         a = np.asarray(a, dtype=float)
         a_prime = np.asarray(a_prime, dtype=float)
-        return (4 * np.pi * U_inf**2 * a * (1 + a)) / (n_blades * omega * (1 - a_prime))
+        return (4 * np.pi * U_inf**2 * a * (1 - a)) / (n_blades * omega * (1 + a_prime))
 
     def _calculate_prandtl_factor(self, r_norm, a):
         
@@ -112,7 +112,7 @@ class BEM:
             f_tip = 1.
         
         try:
-            exponent_root = -(self.n_blades / 2) * ((mu - mu_root) / mu) * np.sqrt(1 + (mu**2 * lambda_local**2) / ((1 - a)**2))
+            exponent_root = -(self.n_blades / 2) * ((mu - mu_root) / mu) * np.sqrt(1 + (mu**2 * lambda_local**2) / ((1 + a)**2))
             #exponent_root = np.clip(exponent_root, -10, 0)
             f_root = (2 / np.pi) * np.arccos(np.exp(exponent_root))
         except:
@@ -439,9 +439,18 @@ class BEM:
         for kiter in range(max_iterations):
             Gamma=GammaNew.copy()
 
-            u_ind=-MatrixU @ Gamma
-            v_ind=-MatrixV @ Gamma
-            w_ind=-MatrixW @ Gamma
+            # PROPELLER sign convention. The wake in make_the_rotor() is laid
+            # down with the trailing-vortex handedness of a wind turbine, so a
+            # positive bound circulation induces a DECELERATING axial velocity
+            # (u_ind < 0) and a co-rotating swirl -- the turbine sense. A
+            # thrusting propeller must accelerate its slipstream, so flip the
+            # induced-velocity field to make the induction consistent with the
+            # (always positive-thrust) section loading. This flips both the
+            # axial induction (vaxial -> U(1+a)) and the swirl (vazim -> wr(1-a')).
+            ind_sign = -1.0
+            u_ind=ind_sign * (MatrixU @ Gamma)
+            v_ind=ind_sign * (MatrixV @ Gamma)
+            w_ind=ind_sign * (MatrixW @ Gamma)
 
             a_temp = np.zeros(n_cp)
             alpha_temp = np.zeros(n_cp)
@@ -480,10 +489,13 @@ class BEM:
                 
                 GammaNew[icp]=0.5*V_effective*chord_abs*cl
 
-                a_temp[icp] = -1.*(-u_ind[icp] + vrot[0]) / (self.U_inf + 1e-12)
+                # Report inductions in the same PROPELLER convention as the BEM:
+                # a  = (vaxial - U)/U  > 0 for an accelerated slipstream,
+                # a' = 1 - vazim/(omega r) > 0 for the reaction swirl deficit.
+                a_temp[icp] = (u_ind[icp] - vrot[0]) / (self.U_inf + 1e-12)
                 alpha_temp[icp] = np.rad2deg(theta_rad - phi)
                 phi_temp[icp] = np.rad2deg(phi)
-                aline_temp[icp] = -1.*(vazim/(radialposition*self.omega) - 1)
+                aline_temp[icp] = (1 - vazim/(radialposition*self.omega))
                 Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.sin(phi)
                 Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.cos(phi)
 
@@ -613,7 +625,9 @@ class BEM:
             for iteration in range(max_iterations):
                 iter_count += 1
                 
-                # Velocities (absolute)
+                # Velocities (absolute) -- PROPELLER convention: the disk
+                # accelerates the axial flow (U(1+a)) and the reaction swirl
+                # reduces the relative tangential speed (omega r (1-a')).
                 V_axial = self.U_inf * (1 + a)
                 V_tangential = omega * r_abs * (1 - a_prime)
                 V_effective = np.sqrt(V_axial**2 + V_tangential**2)
@@ -655,11 +669,12 @@ class BEM:
                     self.CT_conv_ind.append(iter_count)
 
                 
-                # Apply Glauert correction for axial induction
-                a_calc = (-1/2) * (1 - np.sqrt(max(0, 1 + C_T))) # self._apply_glauert_correction(C_T)
+                # Propeller axial-momentum closure: dT = 4 pi r rho U^2 a(1+a) dr
+                # -> C_T_annulus = 4 a (1+a) -> a = 1/2 (sqrt(1+C_T) - 1).
+                a_calc = (1/2) * (np.sqrt(1 + C_T) - 1)
 
                 a_calc = np.clip(a_calc, 0, 0.95)
-                # Azimuthal induction
+                # Azimuthal induction (propeller): mass flux uses U(1+a).
                 a_prime_calc = (F_azimuth * self.n_blades) / (2 * self.rho * (2 * np.pi * r_abs) * self.U_inf * (1 + a_calc) * omega * r_abs)
                 
                 # Check convergence
@@ -733,7 +748,7 @@ class BEM:
 
 if __name__ == "__main__":
     
-    bem = BEM(J=1.8, radius=0.7, n_blades=6, U_inf=60)
+    bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
 
     tend=0.2
@@ -748,7 +763,7 @@ if __name__ == "__main__":
 
     blade_count = bem.n_blades
     station_count = len(r_control) + 1
-    compare_with_bem = False
+    compare_with_bem = True
 
     r_l = r_control[1:]
     A_disk = np.pi * bem.radius**2
@@ -932,6 +947,7 @@ if __name__ == "__main__":
         axs[1, 1].axis('off')
 
     plt.tight_layout()
+    fig.savefig('assignment_2/LL_vs_BEM_prop.png', dpi=150)
     plt.show()
 
     # bem.blade_element(resolution=100, use_prandtl=False)
