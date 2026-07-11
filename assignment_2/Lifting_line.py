@@ -31,7 +31,7 @@ class BEM:
         # Lifting-line vortex geometry / regularisation
         self.cp_chord_frac = 0.25      # control point at 1/4 chord, co-located with the bound vortex
         self.trail_chord_frac = 1.25   # on-blade trailing legs end 1/4 chord behind the TE
-        self.vortex_core = 0.04        # Rankine core radius [m] (~ panel width); damps root/tip oscillations
+        self.vortex_core = 0.03       # Rankine core radius [m] (~ panel width); damps root/tip oscillations
 
         # Airfoil data
         self.AoA, self.cl, self.cd, self.cm = self._get_airfoil()
@@ -112,7 +112,7 @@ class BEM:
             f_tip = 1.
         
         try:
-            exponent_root = -(self.n_blades / 2) * ((mu - mu_root) / mu) * np.sqrt(1 + (mu**2 * lambda_local**2) / ((1 - a)**2))
+            exponent_root = -(self.n_blades / 2) * ((mu - mu_root) / mu) * np.sqrt(1 + (mu**2 * lambda_local**2) / ((1 + a)**2))
             #exponent_root = np.clip(exponent_root, -10, 0)
             f_root = (2 / np.pi) * np.arccos(np.exp(exponent_root))
         except:
@@ -585,7 +585,8 @@ class BEM:
             # Get absolute radius for calculations
             r_abs = r_norm * self.radius
             
-            if r_norm <= self.blade_start_fraction:
+
+            if r_norm <= self.blade_start_fraction or (use_prandtl and r_norm >= 1.0):
                 self.r_R_list.append(r_norm)
                 self.a_list.append(0)
                 self.a_prime_list.append(0)
@@ -641,26 +642,25 @@ class BEM:
                     F_prandtl = self._calculate_prandtl_factor(r_norm, a)
                 else:
                     F_prandtl = 1.0
-                
-                # Corrected forces
-                F_azimuth = (lift * np.sin(phi) - self.drag * np.cos(phi)) * F_prandtl
-                F_axial = (lift * np.cos(phi) + self.drag * np.sin(phi)) * F_prandtl
-                
-                # Thrust coefficient
+                # Floor F so the divisions below stay finite at the very tip (F -> 0 there).
+                F_safe = max(F_prandtl, 1e-4)
 
+
+                F_azimuth = lift * np.sin(phi) - self.drag * np.cos(phi)
+                F_axial = lift * np.cos(phi) + self.drag * np.sin(phi)
+
+                # Thrust coefficient from the real blade force.
                 A_a = 2 * np.pi * r_abs * self.dr[i-1]
                 C_T = (F_axial * self.n_blades * self.dr[i-1]) / (0.5 * self.rho * self.U_inf**2 * A_a)
                 if i==20 and iter_count%2==0:
                     self.CT_conv_list.append(C_T)
                     self.CT_conv_ind.append(iter_count)
 
-                
-                # Apply Glauert correction for axial induction
-                a_calc = (-1/2) * (1 - np.sqrt(max(0, 1 + C_T))) # self._apply_glauert_correction(C_T)
+
+                a_calc = (-1/2) * (1 - np.sqrt(max(0, 1 + C_T / F_safe)))
 
                 a_calc = np.clip(a_calc, 0, 0.95)
-                # Azimuthal induction
-                a_prime_calc = (F_azimuth * self.n_blades) / (2 * self.rho * (2 * np.pi * r_abs) * self.U_inf * (1 + a_calc) * omega * r_abs)
+                a_prime_calc = (F_azimuth * self.n_blades) / (2 * self.rho * (2 * np.pi * r_abs) * self.U_inf * (1 + a_calc) * omega * r_abs * F_safe)
                 
                 # Check convergence
                 if abs(a_calc - a) < tolerance and abs(a_prime_calc - a_prime) < tolerance:
@@ -733,7 +733,7 @@ class BEM:
 
 if __name__ == "__main__":
     
-    bem = BEM(J=1.8, radius=0.7, n_blades=6, U_inf=60)
+    bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
 
     tend=0.2
@@ -741,7 +741,7 @@ if __name__ == "__main__":
     bem.tlst=np.arange(0,tend,dt)
     # Uwake=10
     # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=20, a_ind_wake=0.1, track_convergence=True, spacing='cosine', plot_geometry=False)
+    output = bem.Lifting_line(resolution=20, a_ind_wake=0.1, track_convergence=True, spacing='linear', plot_geometry=False)
 
     # Unpack outputs
     a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
