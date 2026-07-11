@@ -31,7 +31,16 @@ class BEM:
         # Lifting-line vortex geometry / regularisation
         self.cp_chord_frac = 0.25      # control point at 1/4 chord, co-located with the bound vortex
         self.trail_chord_frac = 1.25   # on-blade trailing legs end 1/4 chord behind the TE
-        self.vortex_core = 0.03       # Rankine core radius [m] (~ panel width); damps root/tip oscillations
+
+        # Rankine vortex-core radius [m], graded radially. The grid-scale ("sawtooth")
+        # circulation mode is over-gained/ill-conditioned in the discrete solve, most
+        # severely inboard where the chord is largest and the twist steepest (long,
+        # inclined trailing legs coupling neighbouring panels). So we damp heavily near
+        # the root and lightly near the tip, where a small core is needed to resolve the
+        # circulation roll-off. Set self.vortex_core to a float to force a uniform core.
+        self.vortex_core = None        # None -> use the graded root/tip values below
+        self.vortex_core_root = 0.03   # core at the blade root [m] (heavy damping)
+        self.vortex_core_tip = 0.006   # core at the blade tip  [m] (resolves the tip drop)
 
         # Airfoil data
         self.AoA, self.cl, self.cd, self.cm = self._get_airfoil()
@@ -123,7 +132,17 @@ class BEM:
         
         return F_total
     
-    def biot_savart(self,X1,X2,Xp,gamma):
+    def _core_at_radius(self, r_abs):
+        # Rankine core radius at a given radial station. Uniform if self.vortex_core is
+        # set to a float; otherwise a linear ramp from vortex_core_root (blade start) to
+        # vortex_core_tip (r = R). See __init__ for why the grading is needed.
+        if self.vortex_core is not None:
+            return self.vortex_core
+        mu = r_abs / self.radius
+        frac = np.clip((mu - self.blade_start_fraction) / (1.0 - self.blade_start_fraction), 0.0, 1.0)
+        return self.vortex_core_root + (self.vortex_core_tip - self.vortex_core_root) * frac
+
+    def biot_savart(self,X1,X2,Xp,gamma,rc=None):
         eps=1e-6
         R1=np.sqrt((Xp[0]-X1[0])**2+(Xp[1]-X1[1])**2+(Xp[2]-X1[2])**2)
         R1=max(R1,eps)
@@ -134,7 +153,11 @@ class BEM:
         R12z=(Xp[0]-X1[0])*(Xp[1]-X2[1])-(Xp[1]-X1[1])*(Xp[0]-X2[0])
         R12sqrt=R12x**2+R12y**2+R12z**2
 
-        rc=getattr(self,'vortex_core',0.0)
+        # Graded core: key it to the filament's own radial station (distance from the
+        # rotor axis = x). Applies to bound and wake filaments alike since a wake helix
+        # stays at ~its shedding radius.
+        if rc is None:
+            rc=self._core_at_radius(0.5*(np.hypot(X1[1],X1[2])+np.hypot(X2[1],X2[2])))
         if rc>0.0:
             r0sq=(X2[0]-X1[0])**2+(X2[1]-X1[1])**2+(X2[2]-X1[2])**2
             R12sqrt=R12sqrt+(rc*rc)*r0sq
