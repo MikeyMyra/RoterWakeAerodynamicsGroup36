@@ -532,6 +532,380 @@ class BEM:
 
         
 
+    # ==================================================================
+    #  FREE WAKE VORTEX MODEL
+    #  The wake is not prescribed: every wake node is convected by the
+    #  freestream plus the velocity induced by the bound circulation AND
+    #  by the wake itself, so the wake geometry (pitch + radial
+    #  contraction/expansion) deforms until it is self-consistent.
+    # ==================================================================
+
+    @staticmethod
+    def _rot_yz(vec, angle):
+        # Rotation about the rotor (x) axis, matching the convention used by
+        # rot_yz() inside Lifting_line().
+        c = np.cos(angle)
+        s = np.sin(angle)
+        return np.array([vec[0], vec[1] * c - vec[2] * s, vec[1] * s + vec[2] * c], dtype=float)
+
+    def _core_at_radius_vec(self, r_abs):
+        # Vectorised version of _core_at_radius(): graded Rankine core radius.
+        r_abs = np.asarray(r_abs, dtype=float)
+        if self.vortex_core is not None:
+            return np.full_like(r_abs, float(self.vortex_core))
+        mu = r_abs / self.radius
+        frac = np.clip((mu - self.blade_start_fraction) / (1.0 - self.blade_start_fraction), 0.0, 1.0)
+        return self.vortex_core_root + (self.vortex_core_tip - self.vortex_core_root) * frac
+
+    def _bs_core(self, P1, P2, rc, Xp):
+        # Vectorised Biot-Savart. Returns the UNIT (gamma = 1) induced velocity
+        # at every evaluation point Xp[C,3] from every straight filament segment
+        # (P1[S,3] -> P2[S,3]) with Rankine core rc[S]. Result shape (C, S, 3).
+        # This is the exact same regularised kernel as the scalar biot_savart().
+        eps = 1e-6
+        Xp = np.asarray(Xp, dtype=float)[:, None, :]      # (C,1,3)
+        P1 = np.asarray(P1, dtype=float)[None, :, :]       # (1,S,3)
+        P2 = np.asarray(P2, dtype=float)[None, :, :]       # (1,S,3)
+        rc = np.asarray(rc, dtype=float)[None, :]          # (1,S)
+
+        R1v = Xp - P1                                      # (C,S,3)
+        R2v = Xp - P2
+        R1 = np.maximum(np.sqrt(np.sum(R1v * R1v, axis=-1)), eps)   # (C,S)
+        R2 = np.maximum(np.sqrt(np.sum(R2v * R2v, axis=-1)), eps)
+
+        cr = np.cross(R1v, R2v)                            # (C,S,3)
+        cr_sq = np.sum(cr * cr, axis=-1)                   # (C,S)
+
+        r0 = P2 - P1                                       # (1,S,3)
+        r0_sq = np.sum(r0 * r0, axis=-1)                   # (1,S)
+        cr_sq = cr_sq + (rc * rc) * r0_sq                  # core regularisation
+        cr_sq = np.maximum(cr_sq, eps)
+
+        R01 = np.sum(r0 * R1v, axis=-1)                    # (C,S)
+        R02 = np.sum(r0 * R2v, axis=-1)
+        K = (1.0 / (4.0 * np.pi * cr_sq)) * (R01 / R1 - R02 / R2)   # (C,S)
+        return K[:, :, None] * cr                          # (C,S,3)
+
+    def _free_wake_blade_geometry(self, resolution, spacing='linear'):
+        # Fixed (wake-independent) blade geometry: radial stations, control
+        # points, quarter-chord (bound) nodes Q and the age-0 wake anchor
+        # points T0 (a quarter chord behind the TE), for every blade.
+        if spacing == 'cosine':
+            theta = np.linspace(0, np.pi, resolution + 1)
+            r_norm_tmp = 0.5 * (1 - np.cos(theta))
+            r_stations_norm = self.blade_start_fraction + (1 - self.blade_start_fraction) * r_norm_tmp
+        else:
+            r_stations_norm = np.linspace(self.blade_start_fraction, 1, resolution + 1)
+        r_stations_norm = np.insert(r_stations_norm, 0, 0.0)
+
+        self.r_stations_abs = r_stations_norm * self.radius
+        self.dr = np.diff(self.r_stations_abs)
+        n_edges = len(r_stations_norm)
+        n_panels = n_edges - 1
+
+        def bp(r_norm):
+            if r_norm >= self.blade_start_fraction:
+                twist = -50 * r_norm + 35 + self.collective_blade_pitch + self.collective_blade_pitch_location * 50 - 35
+                chord = 0.18 - 0.06 * r_norm
+            else:
+                twist, chord = 0.0, 0.0
+            return twist, chord
+
+        node_twist = np.array([bp(rn)[0] for rn in r_stations_norm])
+        node_chord_norm = np.array([bp(rn)[1] for rn in r_stations_norm])
+
+        r_control_abs = 0.5 * (self.r_stations_abs[:-1] + self.r_stations_abs[1:])
+        r_control_norm = r_control_abs / self.radius
+        twist_stations = np.array([bp(rn)[0] for rn in r_control_norm])
+        chord_norm_stations = np.array([bp(rn)[1] for rn in r_control_norm])
+
+        cp_chord_frac = getattr(self, 'cp_chord_frac', 0.25)
+        trail_chord_frac = getattr(self, 'trail_chord_frac', 1.25)
+
+        Q = np.zeros((self.n_blades, n_edges, 3))    # quarter-chord (bound) nodes
+        T0 = np.zeros((self.n_blades, n_edges, 3))   # age-0 wake anchor points
+        for b in range(self.n_blades):
+            ang = 2 * np.pi / self.n_blades * b
+            for j in range(n_edges):
+                chord = node_chord_norm[j] * self.radius
+                tw = np.radians(node_twist[j])
+                x_te = chord * np.sin(-tw)
+                z_te = -chord * np.cos(tw)
+                r_j = self.r_stations_abs[j]
+                Q[b, j] = self._rot_yz([0.25 * x_te, r_j, 0.25 * z_te], ang)
+                T0[b, j] = self._rot_yz([trail_chord_frac * x_te, r_j, trail_chord_frac * z_te], ang)
+
+        controlpoints = []
+        panels = []
+        for b in range(self.n_blades):
+            ang = 2 * np.pi / self.n_blades * b
+            for i in range(n_panels):
+                chord_mid = chord_norm_stations[i] * self.radius
+                tw_mid = np.radians(twist_stations[i])
+                x_te_mid = chord_mid * np.sin(-tw_mid)
+                z_te_mid = -chord_mid * np.cos(tw_mid)
+                cp = self._rot_yz([cp_chord_frac * x_te_mid, r_control_abs[i], cp_chord_frac * z_te_mid], ang)
+                controlpoints.append(cp)
+                panels.append(i)
+
+        return dict(n_edges=n_edges, n_panels=n_panels, Q=Q, T0=T0,
+                    controlpoints=np.array(controlpoints), panels=panels,
+                    r_control_abs=r_control_abs, r_control_norm=r_control_norm,
+                    twist_stations=twist_stations, chord_norm_stations=chord_norm_stations)
+
+    def _initial_wake(self, geom, a_ind_wake):
+        # Starting guess: prescribed constant-pitch helix at fixed shedding
+        # radius (identical in spirit to Lifting_line's frozen wake). The
+        # relaxation deforms it from here.
+        T0 = geom['T0']
+        n_edges = geom['n_edges']
+        n_age = len(self.tlst)
+        dt = self.tlst[1] - self.tlst[0]
+        W = np.zeros((self.n_blades, n_edges, n_age, 3))
+        for b in range(self.n_blades):
+            for j in range(n_edges):
+                x0, y0, z0 = T0[b, j]
+                r0 = np.hypot(y0, z0)
+                psi0 = np.arctan2(z0, y0)
+                for k in range(n_age):
+                    x = x0 + k * self.U_inf * (1 + a_ind_wake) * dt
+                    psi = psi0 - k * self.omega * dt
+                    W[b, j, k] = [x, r0 * np.cos(psi), r0 * np.sin(psi)]
+        return W
+
+    def _assemble_segments(self, W, geom):
+        # Build the full straight-filament list (bound + on-blade trailing legs
+        # + free wake) from the current wake node grid W. Every segment is
+        # tagged with the global panel index (0..n_cp-1) whose circulation it
+        # carries, so a single Gamma vector drives the whole vortex system.
+        Q = geom['Q']
+        n_panels = geom['n_panels']
+        n_age = W.shape[2]
+        P1, P2, pan = [], [], []
+        for b in range(self.n_blades):
+            for i in range(n_panels):
+                p = b * n_panels + i
+                # Bound vortex (quarter chord), edge i -> i+1
+                P1.append(Q[b, i]);       P2.append(Q[b, i + 1]);   pan.append(p)
+                # Inboard on-blade trailing leg: age-0 wake point -> quarter chord
+                P1.append(W[b, i, 0]);    P2.append(Q[b, i]);       pan.append(p)
+                # Inboard trailing wake at edge i (oriented downstream -> blade)
+                for k in range(n_age - 1):
+                    P1.append(W[b, i, k + 1]); P2.append(W[b, i, k]); pan.append(p)
+                # Outboard on-blade trailing leg: quarter chord -> age-0 wake point
+                P1.append(Q[b, i + 1]);   P2.append(W[b, i + 1, 0]); pan.append(p)
+                # Outboard trailing wake at edge i+1 (oriented blade -> downstream)
+                for k in range(n_age - 1):
+                    P1.append(W[b, i + 1, k]); P2.append(W[b, i + 1, k + 1]); pan.append(p)
+        P1 = np.array(P1)
+        P2 = np.array(P2)
+        pan = np.array(pan)
+        r_seg = 0.5 * (np.hypot(P1[:, 1], P1[:, 2]) + np.hypot(P2[:, 1], P2[:, 2]))
+        rc = self._core_at_radius_vec(r_seg)
+        return P1, P2, rc, pan
+
+    def _influence_matrices(self, P1, P2, rc, pan, controlpoints, n_cp):
+        # Assemble the (n_cp x n_cp) induced-velocity matrices at the control
+        # points, summing each panel's filaments into that panel's column.
+        V = self._bs_core(P1, P2, rc, controlpoints)      # (C, S, 3)
+        S = P1.shape[0]
+        onehot = np.zeros((S, n_cp))
+        onehot[np.arange(S), pan] = 1.0
+        Au = V[:, :, 0] @ onehot
+        Av = V[:, :, 1] @ onehot
+        Aw = V[:, :, 2] @ onehot
+        return Au, Av, Aw
+
+    def _node_induction(self, P1, P2, rc, gamma_seg, Xp, chunk=256, wake_core=None):
+        # Gamma-weighted induced velocity at every wake node Xp[C,3]. Chunked
+        # over evaluation points to keep the (chunk x S x 3) temporary small.
+        # An optional larger wake_core desingularises the wake-on-wake
+        # interaction (damps the grid-scale far-wake jitter) without changing
+        # the blade loads, which use the finer graded core.
+        if wake_core is not None:
+            rc = np.maximum(rc, wake_core)
+        C = Xp.shape[0]
+        V = np.zeros((C, 3))
+        for s in range(0, C, chunk):
+            e = min(s + chunk, C)
+            Vc = self._bs_core(P1, P2, rc, Xp[s:e])       # (nc, S, 3)
+            V[s:e, 0] = Vc[:, :, 0] @ gamma_seg
+            V[s:e, 1] = Vc[:, :, 1] @ gamma_seg
+            V[s:e, 2] = Vc[:, :, 2] @ gamma_seg
+        return V
+
+    def _solve_gamma(self, MatrixU, MatrixV, MatrixW, controlpoints, panels,
+                     r_control_norm, r_control_abs, chord_norm_stations, twist_stations,
+                     cl_interp, cd_interp, Gamma_init, tolerance, max_iterations, ConvWeight=0.1):
+        # Fixed-point circulation solve for a GIVEN wake geometry. Physics is
+        # identical to the inner loop of Lifting_line().
+        n_cp = len(controlpoints)
+        GammaNew = Gamma_init.copy()
+        error = 10.0
+        converged_iter = max_iterations
+        a_temp = np.zeros(n_cp); alpha_temp = np.zeros(n_cp); phi_temp = np.zeros(n_cp)
+        aline_temp = np.zeros(n_cp); Fnorm_temp = np.zeros(n_cp); Ftan_temp = np.zeros(n_cp)
+
+        for kiter in range(max_iterations):
+            Gamma = GammaNew.copy()
+            u_ind = -MatrixU @ Gamma
+            v_ind = -MatrixV @ Gamma
+            w_ind = -MatrixW @ Gamma
+
+            for icp in range(n_cp):
+                panel_i = panels[icp]
+                r_norm = r_control_norm[panel_i]
+                r_abs = r_control_abs[panel_i]
+                if r_norm <= self.blade_start_fraction:
+                    GammaNew[icp] = 0
+                    continue
+
+                Xp = controlpoints[icp]
+                radialposition = max(np.linalg.norm(Xp), 1e-12)
+                vrot = np.cross([-self.omega, 0, 0], Xp)
+                vel1 = np.array([self.U_inf + u_ind[icp] + vrot[0], v_ind[icp] + vrot[1], w_ind[icp] + vrot[2]], dtype=float)
+                azimdir = np.cross(np.array([-1 / radialposition, 0, 0]), Xp)
+                vazim = np.dot(azimdir, vel1)
+                vaxial = vel1[0]
+
+                chord_abs = chord_norm_stations[panel_i] * self.radius
+                theta_rad = np.deg2rad(twist_stations[panel_i])
+
+                V_effective = np.sqrt(vaxial**2 + vazim**2)
+                phi = np.arctan2(vaxial, vazim)
+                alpha = np.rad2deg(theta_rad - phi)
+                alpha = np.clip(alpha, self.AoA[0], self.AoA[-1])
+                cl = float(cl_interp(alpha))
+                cd = float(cd_interp(alpha))
+
+                GammaNew[icp] = 0.5 * V_effective * chord_abs * cl
+
+                a_temp[icp] = -1. * (-u_ind[icp] + vrot[0]) / (self.U_inf + 1e-12)
+                alpha_temp[icp] = np.rad2deg(theta_rad - phi)
+                phi_temp[icp] = np.rad2deg(phi)
+                aline_temp[icp] = -1. * (vazim / (radialposition * self.omega) - 1)
+                Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd * np.sin(phi)
+                Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd * np.cos(phi)
+
+            refererror = max(np.max(np.abs(GammaNew)), 0.001)
+            error = np.max(np.abs(GammaNew - Gamma)) / refererror
+            if error < tolerance:
+                converged_iter = kiter + 1
+                break
+            GammaNew = (1 - ConvWeight) * Gamma + ConvWeight * GammaNew
+
+        return GammaNew, a_temp, aline_temp, Fnorm_temp, Ftan_temp, alpha_temp, phi_temp, converged_iter
+
+    def Lifting_line_freewake(self, resolution=15, a_ind_wake=0.2, spacing='linear',
+                              wake_iterations=30, wake_relax=0.3, wake_tol=1e-3,
+                              gamma_tol=1e-6, gamma_max_iter=1000, axial_floor_frac=0.3,
+                              wake_core=0.10, verbose=True):
+        """Free (deforming) wake lifting-line solver.
+
+        Outer relaxation:
+          1. build the vortex filaments from the current wake geometry,
+          2. solve the bound circulation Gamma for that geometry,
+          3. evaluate the velocity induced by the whole vortex system (bound
+             + wake) at every wake node,
+          4. re-integrate each trailing line from the blade, convecting nodes
+             with U_inf + V_induced (axial pitch + radial contraction free;
+             the -Omega*dt azimuth step is the shedding rotation that forms
+             the helix),
+          5. under-relax and repeat until the wake stops moving.
+
+        wake_core enlarges the Rankine core used only for the wake-on-wake
+        induction, which damps the grid-scale far-wake jitter without changing
+        the blade loads (those keep the finer graded core).
+
+        Requires self.tlst to be set (defines wake length and step), as in
+        Lifting_line().
+        """
+        cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
+        cd_interp = interp1d(self.AoA, self.cd, kind='linear', fill_value='extrapolate')
+        self.resolution = resolution
+        self.omega = (2 * np.pi * self.rpm) / 60
+        dt = self.tlst[1] - self.tlst[0]
+        n_age = len(self.tlst)
+        r_floor = 1e-3 * self.radius
+
+        geom = self._free_wake_blade_geometry(resolution, spacing)
+        controlpoints = geom['controlpoints']
+        panels = geom['panels']
+        r_control_abs = geom['r_control_abs']
+        r_control_norm = geom['r_control_norm']
+        twist_stations = geom['twist_stations']
+        chord_norm_stations = geom['chord_norm_stations']
+        n_panels = geom['n_panels']
+        n_edges = geom['n_edges']
+        n_cp = len(controlpoints)
+
+        print(f"making {self.n_blades} blade free-wake lifting line geometry "
+              f"({n_cp} control points, {n_age} wake nodes/line)")
+
+        W0 = self._initial_wake(geom, a_ind_wake)
+        W = W0.copy()
+        Gamma = np.zeros(n_cp)
+
+        wake_move_hist = []
+        a_temp = aline_temp = Fnorm_temp = Ftan_temp = alpha_temp = phi_temp = None
+        used_iter = wake_iterations
+
+        for wit in range(wake_iterations):
+            # (1) filaments from the current wake geometry
+            P1, P2, rc, pan = self._assemble_segments(W, geom)
+
+            # (2) influence matrices + circulation solve
+            MatrixU, MatrixV, MatrixW = self._influence_matrices(P1, P2, rc, pan, controlpoints, n_cp)
+            (Gamma, a_temp, aline_temp, Fnorm_temp, Ftan_temp,
+             alpha_temp, phi_temp, giter) = self._solve_gamma(
+                MatrixU, MatrixV, MatrixW, controlpoints, panels,
+                r_control_norm, r_control_abs, chord_norm_stations, twist_stations,
+                cl_interp, cd_interp, Gamma, gamma_tol, gamma_max_iter)
+
+            # (3) velocity induced by the whole vortex system at every wake node.
+            #     Same sign convention as the blade solve (-Matrix @ Gamma).
+            gamma_seg = Gamma[pan]
+            Vind = -self._node_induction(P1, P2, rc, gamma_seg, W.reshape(-1, 3), wake_core=wake_core)
+            Vind = Vind.reshape(self.n_blades, n_edges, n_age, 3)
+
+            # (4) re-integrate each trailing line from its anchored age-0 node
+            Wnew = W.copy()
+            for b in range(self.n_blades):
+                for j in range(n_edges):
+                    for k in range(n_age - 1):
+                        x, y, z = Wnew[b, j, k]
+                        r = max(np.hypot(y, z), r_floor)
+                        ct = y / r
+                        st = z / r
+                        vx = self.U_inf + Vind[b, j, k, 0]
+                        vr = Vind[b, j, k, 1] * ct + Vind[b, j, k, 2] * st
+                        vt = -Vind[b, j, k, 1] * st + Vind[b, j, k, 2] * ct
+                        vx = max(vx, axial_floor_frac * self.U_inf)   # keep wake convecting downstream
+                        x_new = x + vx * dt
+                        r_new = max(r + vr * dt, r_floor)
+                        psi = np.arctan2(z, y)
+                        psi_new = psi + (vt / r) * dt - self.omega * dt
+                        Wnew[b, j, k + 1] = [x_new, r_new * np.cos(psi_new), r_new * np.sin(psi_new)]
+
+            # (5) under-relax and check convergence
+            dmax = float(np.max(np.linalg.norm(Wnew - W, axis=-1)))
+            W = (1 - wake_relax) * W + wake_relax * Wnew
+            wake_move_hist.append(dmax)
+            if verbose:
+                print(f"[free-wake] iter {wit + 1}/{wake_iterations}  "
+                      f"max node move = {dmax:.4e} m  (gamma iters {giter})")
+            if dmax < wake_tol * self.radius:
+                used_iter = wit + 1
+                if verbose:
+                    print(f"[free-wake] wake geometry converged after {used_iter} iterations")
+                break
+
+        self.free_wake_W = W
+        self.free_wake_W0 = W0
+        convergence_history = {'error': wake_move_hist, 'iteration': list(range(len(wake_move_hist)))}
+        return (a_temp, aline_temp, Fnorm_temp, Ftan_temp, Gamma, used_iter,
+                convergence_history, r_control_abs, alpha_temp, phi_temp, W0, W)
+
     def blade_element(self, resolution=100, tolerance=1e-6, max_iterations=1000, spacing='linear', use_prandtl=True, track_convergence=False):
         
         cl_interp = interp1d(self.AoA, self.cl, kind='linear', fill_value='extrapolate')
@@ -755,95 +1129,108 @@ class BEM:
 
 
 if __name__ == "__main__":
-    
+
+    # ------------------------------------------------------------------
+    # Free Wake Vortex Model demo.
+    # The wake is convected by the freestream plus the velocity induced by
+    # the blades' bound circulation AND by the wake itself, so the wake
+    # geometry (pitch + radial contraction) deforms until self-consistent.
+    # ------------------------------------------------------------------
     bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
+    tend = 0.3
+    dt = 0.005
+    bem.tlst = np.arange(0, tend, dt)
 
-    tend=0.2
-    dt=0.005
-    bem.tlst=np.arange(0,tend,dt)
-    # Uwake=10
-    # print(bem.calc_ind_filiment([0,0,0.8],0.4))
-    output = bem.Lifting_line(resolution=20, a_ind_wake=0.1, track_convergence=True, spacing='linear', plot_geometry=False)
+    output = bem.Lifting_line_freewake(
+        resolution=20,
+        a_ind_wake=0.2,        # initial helix pitch guess (deformed afterwards)
+        spacing='linear',
+        wake_iterations=100,
+        wake_relax=0.3,
+        wake_tol=1e-3,
+        wake_core=0.10,        # desingularises wake-on-wake induction (stability)
+    )
 
-    # Unpack outputs
-    a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, conv_iter, conv_hist, r_control, alpha_out, phi_out = output
+    (a_out, aline_out, Fnorm_out, Ftan_out, Gamma_out, wake_iter,
+     wake_hist, r_control, alpha_out, phi_out, W0, W) = output
 
-    # L = F_norm * cos(phi) + F_tan * sin(phi)
-    Lift_dist = Fnorm_out * np.cos(np.deg2rad(phi_out)) + Ftan_out * np.sin(np.deg2rad(phi_out))
-    
-    # D = F_norm * sin(phi) - F_tan * cos(phi)
-    Drag_dist = Fnorm_out * np.sin(np.deg2rad(phi_out)) - Ftan_out * np.cos(np.deg2rad(phi_out))
-
+    # --- integrated coefficients (propeller convention) ---
     blade_count = bem.n_blades
-    station_count = len(r_control) + 1
-    compare_with_bem = False
-
-    r_l = r_control[1:]
-    A_disk = np.pi * bem.radius**2
-
-    # Propeller convention: C_T = T/(rho n^2 D^4), C_Q = Q/(rho n^2 D^5), C_P = P/(rho n^3 D^5)
-    T_LL = 0
-    Q_LL = 0
-    for i in range(len(r_l)):
-        T_LL += Fnorm_out[i+1] * blade_count * bem.dr[i]
-        Q_LL += Ftan_out[i+1] * blade_count * r_l[i] * bem.dr[i]
+    n_panels = len(r_control)
+    T_LL = 0.0
+    Q_LL = 0.0
+    for p in range(1, n_panels):            # skip the root panel (no blade there)
+        T_LL += Fnorm_out[p] * blade_count * bem.dr[p]
+        Q_LL += Ftan_out[p] * blade_count * r_control[p] * bem.dr[p]
 
     C_T_LL = T_LL / (bem.rho * bem.n_rps**2 * bem.D**4)
     C_Q_LL = Q_LL / (bem.rho * bem.n_rps**2 * bem.D**5)
     C_P_LL = (Q_LL * bem.omega) / (bem.rho * bem.n_rps**3 * bem.D**5)
-    print(f"Total thrust coefficient from lifting line: C_T = {C_T_LL:.4f}")
-    print(f"Total torque coefficient from lifting line: C_Q = {C_Q_LL:.4f}")
-    print(f"Total power coefficient from lifting line:  C_P = {C_P_LL:.4f}")
+    print(f"Free-wake thrust coefficient: C_T = {C_T_LL:.4f}")
+    print(f"Free-wake torque coefficient: C_Q = {C_Q_LL:.4f}")
+    print(f"Free-wake power  coefficient: C_P = {C_P_LL:.4f}")
 
-   
-    if False:
-        bem.blade_element(resolution=100, use_prandtl=False)
-        omega = bem.omega
-        a_bem = np.asarray(bem.a_list, dtype=float)
-        a_prime_bem = np.asarray(bem.a_prime_list, dtype=float)
-        Gamma_actual = np.asarray(bem.circulation_list, dtype=float)
-        r_bem_abs = np.asarray(bem.r_R_list, dtype=float) * bem.radius
-        Gamma_theory = BEM.circulation_from_momentum(bem.U_inf, omega, a_bem, a_prime_bem, bem.n_blades)
+    # ------------------------------------------------------------------
+    # 3D wake geometry: initial prescribed helix vs deformed free wake
+    # ------------------------------------------------------------------
+    n_edges = W.shape[1]
+    fig_w = plt.figure(figsize=(11, 6))
+    axw = fig_w.add_subplot(projection='3d')
+    # all blades' free wake, faint, for context
+    for b in range(bem.n_blades):
+        for j in range(n_edges):
+            axw.plot(W[b, j, :, 0], W[b, j, :, 1], W[b, j, :, 2], color='tab:blue', lw=0.3, alpha=0.25)
+    # one blade highlighted: prescribed helix vs deformed free wake
+    for j in range(n_edges):
+        axw.plot(W0[0, j, :, 0], W0[0, j, :, 1], W0[0, j, :, 2], color='0.6', lw=0.9)
+        axw.plot(W[0, j, :, 0], W[0, j, :, 1], W[0, j, :, 2], color='tab:red', lw=0.9)
+    axw.plot([], [], [], color='0.6', label='initial prescribed helix (blade 0)')
+    axw.plot([], [], [], color='tab:red', label='free wake (blade 0)')
+    axw.plot([], [], [], color='tab:blue', alpha=0.4, label='free wake (other blades)')
+    axw.set_title('Wake geometry: prescribed helix vs deformed free wake')
+    axw.set_xlabel('x (axial)')
+    axw.set_ylabel('y')
+    axw.set_zlabel('z')
+    axw.legend()
+    try:
+        axw.set_box_aspect((2, 1, 1))
+    except Exception:
+        pass
 
-        valid = np.abs(Gamma_actual) > 1e-6  # skip zeroed-out root stations
-        rel_err = np.abs(Gamma_theory[valid] - Gamma_actual[valid]) / np.abs(Gamma_actual[valid])
-        if rel_err.size:
-            print(f"Momentum-circulation check vs BEM: max rel. diff = {np.max(rel_err):.2e}, "
-                f"mean rel. diff = {np.mean(rel_err):.2e}")
+    # ------------------------------------------------------------------
+    # Radial deformation diagnostic (contraction / expansion of the wake)
+    # ------------------------------------------------------------------
+    fig_r, axr = plt.subplots(figsize=(7, 4))
+    for j in range(n_edges):
+        r0 = np.hypot(W0[0, j, :, 1], W0[0, j, :, 2])
+        rf = np.hypot(W[0, j, :, 1], W[0, j, :, 2])
+        axr.plot(W0[0, j, :, 0], r0, color='0.8', lw=0.6)
+        axr.plot(W[0, j, :, 0], rf, color='tab:red', lw=0.6)
+    axr.plot([], [], color='0.8', label='prescribed (fixed radius)')
+    axr.plot([], [], color='tab:red', label='free wake')
+    axr.set_xlabel('x (axial)')
+    axr.set_ylabel('wake radius (m)')
+    axr.set_title('Wake radius vs axial position (blade 0)')
+    axr.legend()
+    axr.grid(True)
 
-        # Dedicated comparison figure: actual BEM circulation vs momentum-implied circulation.
-        fig_gamma, (ax_g, ax_e) = plt.subplots(1, 2, figsize=(12, 4.5))
-        ax_g.plot(r_bem_abs, Gamma_actual, '-o', ms=3, label=r'BEM $\Gamma = \frac{1}{2} V c\, C_l$')
-        ax_g.plot(r_bem_abs, Gamma_theory, '--s', ms=3,
-                label=r'Momentum $\Gamma = \frac{4\pi U_\infty^2 a(1-a)}{B\,\Omega(1+a^\prime)}$')
-        ax_g.axvline(bem.blade_start_fraction * bem.radius, color='k', ls=':', lw=1, label='blade start')
-        ax_g.set_xlabel('r (m)')
-        ax_g.set_ylabel(r'per-blade circulation $\Gamma$ (m$^2$/s)')
-        ax_g.set_title('Circulation: blade-element vs momentum relation (BEM, no Prandtl)')
-        ax_g.legend()
-        ax_g.grid(True)
+    # ------------------------------------------------------------------
+    # Spanwise loads / induction / circulation
+    # ------------------------------------------------------------------
+    # L = F_norm * cos(phi) + F_tan * sin(phi)
+    Lift_dist = Fnorm_out * np.cos(np.deg2rad(phi_out)) + Ftan_out * np.sin(np.deg2rad(phi_out))
+    # D = F_norm * sin(phi) - F_tan * cos(phi)
+    Drag_dist = Fnorm_out * np.sin(np.deg2rad(phi_out)) - Ftan_out * np.cos(np.deg2rad(phi_out))
 
-        ax_e.plot(r_bem_abs[valid], 100 * rel_err, '-o', ms=3, color='C3')
-        ax_e.axvline(bem.blade_start_fraction * bem.radius, color='k', ls=':', lw=1, label='blade start')
-        ax_e.set_xlabel('r (m)')
-        ax_e.set_ylabel('relative difference (%)')
-        ax_e.set_title('Deviation (residual is the drag term only)')
-        ax_e.legend()
-        ax_e.grid(True)
-        fig_gamma.tight_layout()
-
+    station_count = len(r_control) + 1
 
     def plot_blade_overlay(ax, x_values, y_values, label_prefix='', style='-o'):
         x_values = np.asarray(x_values)
         y_values = np.asarray(y_values)
-
-        # remove r_index == 0 control points
         x_masked = x_values[1:]
-
         if station_count > 0 and len(y_values) == blade_count * (station_count - 1):
             blade_series = [np.asarray(y_values[i * (station_count - 1):(i + 1) * (station_count - 1)])[1:] for i in range(blade_count)]
-            # if all blades identical, plot a single line
             if len(blade_series) > 0 and all(np.allclose(blade_series[0], series) for series in blade_series[1:]):
                 ax.plot(x_masked, blade_series[0], style, label=f'{label_prefix} all blades (identical)')
                 ax.text(0.02, 0.95, f'{blade_count} blades overlap', transform=ax.transAxes,
@@ -858,7 +1245,6 @@ if __name__ == "__main__":
         ax.set_title(title)
         ax.set_xlabel('r (m)')
         ax.set_ylabel(ylabel)
-        # add vertical line showing blade start location
         try:
             blade_root_r = bem.blade_start_fraction * bem.radius
             ax.axvline(blade_root_r, color='k', linestyle='--', linewidth=1, label='blade start')
@@ -867,28 +1253,12 @@ if __name__ == "__main__":
         ax.legend()
         ax.grid(True)
 
-    # Plot results
-    bem_r_abs = None
-    if compare_with_bem:
-        # run BEM blade-element solver for comparison
-        bem.blade_element(resolution=100, use_prandtl=True)
-        bem_r_abs = np.array(bem.r_R_list) * bem.radius
-
-
     fig, axs = plt.subplots(2, 3, figsize=(15, 8))
 
     # Circulation
     try:
         plot_blade_overlay(axs[0, 0], r_control, Gamma_out * bem.n_blades * np.pi * bem.omega / bem.U_inf**2, 'Gamma')
         finish_axis(axs[0, 0], 'Nondimensional Circulation vs radius', r'$\frac{\Gamma N_\text{blades} \pi \Omega}{U_\infty^2}$')
-        # overlay BEM circulation
-        if compare_with_bem:
-            try:
-                if bem_r_abs is not None and len(bem.circulation_list) > 0:
-                    axs[0, 0].plot(bem_r_abs, np.array(bem.circulation_list) * bem.n_blades * np.pi * bem.omega / bem.U_inf**2, '--k', label='BEM')
-                    axs[0, 0].legend()
-            except Exception:
-                pass
     except Exception:
         pass
 
@@ -897,79 +1267,45 @@ if __name__ == "__main__":
         plot_blade_overlay(axs[0, 1], r_control, a_out, 'a')
         plot_blade_overlay(axs[0, 1], r_control, aline_out, "a'", style='-s')
         finish_axis(axs[0, 1], 'Induction factors', 'Induction factor')
-        # overlay BEM induction
-        if compare_with_bem:
-            try:
-                if bem_r_abs is not None and len(bem.a_list) > 0:
-                    axs[0, 1].plot(bem_r_abs, bem.a_list, '--k', label='BEM a')
-                if bem_r_abs is not None and len(bem.a_prime_list) > 0:
-                    axs[0, 1].plot(bem_r_abs, bem.a_prime_list, ':k', label="BEM a'")
-                axs[0, 1].legend()
-            except Exception:
-                pass
     except Exception:
         pass
 
-    # Forces
-    try:
-        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out/(bem.rho * bem.n_rps**2 * bem.D**3), 'Fnorm')
-        plot_blade_overlay(axs[1, 0], r_control, Ftan_out/(bem.rho * bem.n_rps**2 * bem.D**3), 'Ftan', style='-s')
-        finish_axis(axs[1, 0], 'Section forces', r'Force per unit span coefficient $ C_F = \frac{1}{\rho n^2 D^3}\frac{dF}{dr}$')
-        # overlay BEM forces
-        if compare_with_bem:
-            try:
-                if bem_r_abs is not None and len(bem.F_axial_list) > 0:
-                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_axial_list)/(bem.rho * bem.n_rps**2 * bem.D**3), '--k', label='BEM F_axial')
-                if bem_r_abs is not None and len(bem.F_azimuth_list) > 0:
-                    axs[1, 0].plot(bem_r_abs, np.array(bem.F_azimuth_list)/(bem.rho * bem.n_rps**2 * bem.D**3), ':k', label='BEM F_azimuth')
-                axs[1, 0].legend()
-            except Exception as e:
-                print(e)
-                pass
-    except Exception as e:
-        print(e)
-        pass
-
-    # Angle of attack
+    # Angle of attack and flow angle
     try:
         plot_blade_overlay(axs[0, 2], r_control, alpha_out, 'AoA', style='-^')
         plot_blade_overlay(axs[0, 2], r_control, phi_out, 'Flow angle', style='-s')
-        # overlay BEM AoA
-        if compare_with_bem:
-            try:
-                if bem_r_abs is not None and len(bem.alpha_list) > 0:
-                    axs[0, 2].plot(bem_r_abs, bem.alpha_list, '--k', label='BEM AoA')
-                    axs[0, 2].plot(bem_r_abs, bem.phi_list, ':k', label='BEM flow angle')
-                    axs[0, 2].legend()
-            except Exception:
-                pass
         finish_axis(axs[0, 2], 'Angle of attack and Flow angle', r'AoA, $\phi$  (degrees)')
     except Exception:
         pass
 
-    # Convergence history
+    # Section forces
     try:
-        if conv_hist is not None and 'error' in conv_hist and len(conv_hist['error'])>0:
-            axs[1, 1].semilogy(conv_hist['iteration'], conv_hist['error'])
-            axs[1, 1].set_title('Convergence history')
-            axs[1, 1].set_xlabel('Iteration')
-            axs[1, 1].set_ylabel('Relative error')
+        plot_blade_overlay(axs[1, 0], r_control, Fnorm_out / (bem.rho * bem.n_rps**2 * bem.D**3), 'Fnorm')
+        plot_blade_overlay(axs[1, 0], r_control, Ftan_out / (bem.rho * bem.n_rps**2 * bem.D**3), 'Ftan', style='-s')
+        finish_axis(axs[1, 0], 'Section forces', r'$ C_F = \frac{1}{\rho n^2 D^3}\frac{dF}{dr}$')
+    except Exception:
+        pass
+
+    # Wake-geometry convergence history
+    try:
+        if wake_hist is not None and len(wake_hist['error']) > 0:
+            axs[1, 1].semilogy(wake_hist['iteration'], wake_hist['error'], '-o', ms=3)
+            axs[1, 1].set_title('Free-wake convergence')
+            axs[1, 1].set_xlabel('Wake iteration')
+            axs[1, 1].set_ylabel('Max node displacement (m)')
             axs[1, 1].grid(True)
         else:
             axs[1, 1].axis('off')
     except Exception:
         axs[1, 1].axis('off')
 
+    # Lift / drag distribution
+    try:
+        plot_blade_overlay(axs[1, 2], r_control, Lift_dist, 'Lift', style='-o')
+        plot_blade_overlay(axs[1, 2], r_control, Drag_dist, 'Drag', style='-s')
+        finish_axis(axs[1, 2], 'Section lift and drag', 'Force per unit span (N/m)')
+    except Exception:
+        pass
+
     plt.tight_layout()
     plt.show()
-
-    # bem.blade_element(resolution=100, use_prandtl=False)
-    
-    # plot(
-    #     "Spanwise Distribution: Angle of Attack",
-    #     bem.r_R_list, [bem.alpha_list],
-    #     ["Angle of Attack (α)"],
-    #     "r/R", "α (deg)"
-    # )
-    
-    # plt.show()
