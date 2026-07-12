@@ -507,8 +507,8 @@ class BEM:
                 alpha_temp[icp] = np.rad2deg(theta_rad - phi)
                 phi_temp[icp] = np.rad2deg(phi)
                 aline_temp[icp] = -1.*(vazim/(radialposition*self.omega) - 1)
-                Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.sin(phi)
-                Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.cos(phi)
+                Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.sin(phi)
+                Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.cos(phi)
 
 
             refererror=max(np.max(np.abs(GammaNew)),0.001)
@@ -669,8 +669,8 @@ class BEM:
                 F_safe = max(F_prandtl, 1e-4)
 
 
-                F_azimuth = lift * np.sin(phi) - self.drag * np.cos(phi)
-                F_axial = lift * np.cos(phi) + self.drag * np.sin(phi)
+                F_azimuth = lift * np.sin(phi) + self.drag * np.cos(phi)
+                F_axial = lift * np.cos(phi) - self.drag * np.sin(phi)
 
                 # Thrust coefficient from the real blade force.
                 A_a = 2 * np.pi * r_abs * self.dr[i-1]
@@ -756,7 +756,7 @@ class BEM:
 
 if __name__ == "__main__":
     
-    bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
+    bem = BEM(J=0.8, radius=0.7, n_blades=6, U_inf=60)
 
 
     tend=0.2
@@ -777,7 +777,7 @@ if __name__ == "__main__":
 
     blade_count = bem.n_blades
     station_count = len(r_control) + 1
-    compare_with_bem = False
+    compare_with_bem = True
 
     r_l = r_control[1:]
     A_disk = np.pi * bem.radius**2
