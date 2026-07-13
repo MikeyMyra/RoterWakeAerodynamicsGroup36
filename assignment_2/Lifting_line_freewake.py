@@ -507,8 +507,8 @@ class BEM:
                 alpha_temp[icp] = np.rad2deg(theta_rad - phi)
                 phi_temp[icp] = np.rad2deg(phi)
                 aline_temp[icp] = -1.*(vazim/(radialposition*self.omega) - 1)
-                Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.sin(phi)
-                Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.cos(phi)
+                Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.sin(phi)
+                Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd_interp(alpha) * np.cos(phi)
 
 
             refererror=max(np.max(np.abs(GammaNew)),0.001)
@@ -784,8 +784,8 @@ class BEM:
                 alpha_temp[icp] = np.rad2deg(theta_rad - phi)
                 phi_temp[icp] = np.rad2deg(phi)
                 aline_temp[icp] = -1. * (vazim / (radialposition * self.omega) - 1)
-                Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd * np.sin(phi)
-                Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd * np.cos(phi)
+                Fnorm_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.cos(phi) - 0.5 * self.rho * V_effective**2 * chord_abs * cd * np.sin(phi)
+                Ftan_temp[icp] = cl * 0.5 * self.rho * V_effective**2 * chord_abs * np.sin(phi) + 0.5 * self.rho * V_effective**2 * chord_abs * cd * np.cos(phi)
 
             refererror = max(np.max(np.abs(GammaNew)), 0.001)
             error = np.max(np.abs(GammaNew - Gamma)) / refererror
@@ -1043,8 +1043,8 @@ class BEM:
                 F_safe = max(F_prandtl, 1e-4)
 
 
-                F_azimuth = lift * np.sin(phi) - self.drag * np.cos(phi)
-                F_axial = lift * np.cos(phi) + self.drag * np.sin(phi)
+                F_azimuth = lift * np.sin(phi) + self.drag * np.cos(phi)
+                F_axial = lift * np.cos(phi) - self.drag * np.sin(phi)
 
                 # Thrust coefficient from the real blade force.
                 A_a = 2 * np.pi * r_abs * self.dr[i-1]
@@ -1220,8 +1220,8 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------
     # L = F_norm * cos(phi) + F_tan * sin(phi)
     Lift_dist = Fnorm_out * np.cos(np.deg2rad(phi_out)) + Ftan_out * np.sin(np.deg2rad(phi_out))
-    # D = F_norm * sin(phi) - F_tan * cos(phi)
-    Drag_dist = Fnorm_out * np.sin(np.deg2rad(phi_out)) - Ftan_out * np.cos(np.deg2rad(phi_out))
+    # D = -F_norm * sin(phi) + F_tan * cos(phi)
+    Drag_dist = -Fnorm_out * np.sin(np.deg2rad(phi_out)) + Ftan_out * np.cos(np.deg2rad(phi_out))
 
     station_count = len(r_control) + 1
 

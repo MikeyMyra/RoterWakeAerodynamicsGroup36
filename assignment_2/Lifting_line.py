@@ -756,7 +756,7 @@ class BEM:
 
 if __name__ == "__main__":
     
-    bem = BEM(J=0.8, radius=0.7, n_blades=6, U_inf=60)
+    bem = BEM(J=1.6, radius=0.7, n_blades=6, U_inf=60)
 
 
     tend=0.2
