@@ -20,6 +20,8 @@ Run from the repository root so the relative airfoil path resolves:
 
 import os
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -70,6 +72,36 @@ def run_lifting_line_freewake(J, radius=0.7, n_blades=6, U_inf=60,
     return C_T, C_Q, C_P
 
 
+
+def _run_freewake_case(index, J, n_cases):
+    """Worker function: run one J case and package timing/output for the parent process."""
+    t0 = time.time()
+    error = None
+    try:
+        C_T, C_Q, C_P = run_lifting_line_freewake(J)
+    except Exception as exc:
+        C_T = C_Q = C_P = np.nan
+        error = str(exc)
+
+    if np.isfinite(C_P) and C_P != 0:
+        eta_j = C_T * J / C_P
+    else:
+        eta_j = np.nan
+
+    return {
+        "index": index,
+        "n_cases": n_cases,
+        "J": J,
+        "CT": C_T,
+        "CQ": C_Q,
+        "CP": C_P,
+        "eta": eta_j,
+        "elapsed": time.time() - t0,
+        "error": error,
+    }
+
+
+
 CACHE_FILE = 'assignment_2/J_sweep_freewake_results.npz'
 FROZEN_CACHE = 'assignment_2/J_sweep_results.npz'   # optional overlay (frozen wake)
 
@@ -84,25 +116,39 @@ def main():
         J_values, CT, CQ, CP = data['J'], data['CT'], data['CQ'], data['CP']
         print(f"Loaded cached results from {CACHE_FILE}")
     else:
-        CT_list, CQ_list, CP_list = [], [], []
+        n_cases = len(J_values)
+        n_workers = n_cases
+        available_cores = os.cpu_count() or 1
+        if available_cores < n_workers:
+            print(f"Warning: {n_cases} cases requested but only {available_cores} CPU cores detected; "
+                  f"the OS will time-slice workers.")
+        print(f"Running {n_cases} free-wake cases in parallel ({n_workers} worker processes).")
+
+        CT = np.full(n_cases, np.nan)
+        CQ = np.full(n_cases, np.nan)
+        CP = np.full(n_cases, np.nan)
         t_start = time.time()
-        for k, J in enumerate(J_values):
-            t0 = time.time()
-            try:
-                C_T, C_Q, C_P = run_lifting_line_freewake(J)
-            except Exception as exc:
-                print(f"J = {J:5.2f} | FAILED ({exc}); storing NaN")
-                C_T = C_Q = C_P = np.nan
-            CT_list.append(C_T)
-            CQ_list.append(C_Q)
-            CP_list.append(C_P)
-            eta_j = C_T * J / C_P if (C_P not in (0, np.nan) and C_P != 0) else np.nan
-            print(f"[{k+1:2d}/{len(J_values)}] J = {J:5.2f} | C_T = {C_T:8.4f} | "
-                  f"C_Q = {C_Q:8.4f} | C_P = {C_P:8.4f} | eta = {eta_j:7.4f} | "
-                  f"{time.time()-t0:5.1f}s")
-        CT = np.array(CT_list)
-        CQ = np.array(CQ_list)
-        CP = np.array(CP_list)
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = [
+                executor.submit(_run_freewake_case, k, float(J), n_cases)
+                for k, J in enumerate(J_values)
+            ]
+
+            for future in as_completed(futures):
+                result = future.result()
+                k = result["index"]
+                CT[k] = result["CT"]
+                CQ[k] = result["CQ"]
+                CP[k] = result["CP"]
+
+                if result["error"] is not None:
+                    print(f"J = {result['J']:5.2f} | FAILED ({result['error']}); storing NaN")
+
+                print(f"[{k+1:2d}/{result['n_cases']}] J = {result['J']:5.2f} | "
+                      f"C_T = {result['CT']:8.4f} | C_Q = {result['CQ']:8.4f} | "
+                      f"C_P = {result['CP']:8.4f} | eta = {result['eta']:7.4f} | "
+                      f"{result['elapsed']:5.1f}s")
+
         np.savez(CACHE_FILE, J=J_values, CT=CT, CQ=CQ, CP=CP)
         print(f"Saved results cache to {CACHE_FILE}  (total {time.time()-t_start:.1f}s)")
 
